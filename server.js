@@ -246,16 +246,33 @@ app.get('/api/stream-url', async (req, res) => {
     const videoId = String(req.query.videoId || '');
     if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
     
-    // Meminta data player InnerTube API dari YouTube Music
-    const d = await yt('player', { videoId: videoId });
-    const adaptive = (d.streamingData && d.streamingData.adaptiveFormats) || [];
+    // Menggunakan payload request player yang lebih lengkap untuk melewati proteksi YouTube Music
+    const playerBody = {
+      videoId: videoId,
+      racyCheckOk: true,
+      contentCheckOk: true,
+      playbackContext: {
+        contentPlaybackContext: {
+          signatureTimestamp: 19700 // Timestamp standar bypass
+        }
+      }
+    };
+
+    const d = await yt('player', playerBody);
+    const streamingData = d.streamingData || {};
+    const adaptive = streamingData.adaptiveFormats || streamingData.formats || [];
     
     let bestUrl = '';
     let maxBitrate = 0;
+    
     for (const fmt of adaptive) {
-      if (fmt.mimeType && fmt.mimeType.startsWith('audio/') && fmt.url) {
-        if (fmt.bitrate >= maxBitrate) {
-          maxBitrate = fmt.bitrate;
+      const mime = fmt.mimeType || '';
+      if ((mime.startsWith('audio/') || mime.includes('mp4a') || mime.includes('opus')) && fmt.url) {
+        const bitrate = fmt.bitrate || 0;
+        // Prioritaskan format m4a (mp4a) karena paling stabil diputar di ExoPlayer Android
+        const score = mime.includes('mp4a') ? bitrate + 200000 : bitrate;
+        if (score >= maxBitrate) {
+          maxBitrate = score;
           bestUrl = fmt.url;
         }
       }
@@ -267,6 +284,7 @@ app.get('/api/stream-url', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 
 app.get('/api/charts', async (req, res) => {
   try {
