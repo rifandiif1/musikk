@@ -268,6 +268,17 @@ app.get('/api/stream-url', async (req, res) => {
   }
 });
 
+app.get('/api/check-ip', async (req, res) => {
+  try {
+    // Menembak layanan publik untuk mengecek IP keluar Vercel saat ini
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    res.json({ vercel_ip: data.ip });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/charts', async (req, res) => {
   try {
     const data = await cached('charts', 30 * 60 * 1000, async () => {
