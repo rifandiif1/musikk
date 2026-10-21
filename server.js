@@ -243,42 +243,62 @@ app.get('/api/home', async (req, res) => {
 // Pastikan endpoint ini ada di dalam server.js yang kamu deploy ke Vercel
 app.get('/api/stream-url', async (req, res) => {
   try {
-    const videoId = String(req.query.videoId || '');
+    const videoId = String(req.query.videoId || '').trim();
     if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
     
-    // Menggunakan payload request player yang lebih lengkap untuk melewati proteksi YouTube Music
-    const playerBody = {
+    // Panggil InnerTube API YouTube player
+    const d = await yt('player', {
       videoId: videoId,
-      racyCheckOk: true,
-      contentCheckOk: true,
+      context: {
+        client: {
+          clientName: "ANDROID_MUSIC",
+          clientVersion: "6.41.52",
+          hl: "id",
+          gl: "ID"
+        }
+      },
       playbackContext: {
         contentPlaybackContext: {
-          signatureTimestamp: 19700 // Timestamp standar bypass
+          signatureTimestamp: 19700
         }
       }
-    };
+    });
 
-    const d = await yt('player', playerBody);
     const streamingData = d.streamingData || {};
-    const adaptive = streamingData.adaptiveFormats || streamingData.formats || [];
+    // Gabungkan adaptiveFormats dan formats agar jangkauan pencarian audio lebih luas
+    const formats = [
+      ...(streamingData.adaptiveFormats || []),
+      ...(streamingData.formats || [])
+    ];
     
     let bestUrl = '';
     let maxBitrate = 0;
     
-    for (const fmt of adaptive) {
+    for (const fmt of formats) {
       const mime = fmt.mimeType || '';
-      if ((mime.startsWith('audio/') || mime.includes('mp4a') || mime.includes('opus')) && fmt.url) {
+      const url = fmt.url || fmt.signatureCipher || fmt.cipher;
+      
+      // Cari yang berformat audio atau mengandung m4a/opus/mp4a
+      if ((mime.startsWith('audio/') || mime.includes('mp4a') || mime.includes('opus')) && url) {
         const bitrate = fmt.bitrate || 0;
-        // Prioritaskan format m4a (mp4a) karena paling stabil diputar di ExoPlayer Android
-        const score = mime.includes('mp4a') ? bitrate + 200000 : bitrate;
+        const score = mime.includes('mp4a') ? bitrate + 300000 : bitrate;
         if (score >= maxBitrate) {
           maxBitrate = score;
-          bestUrl = fmt.url;
+          bestUrl = url;
         }
       }
     }
     
-    if (!bestUrl) throw new Error('No audio stream found');
+    // Jika masih kosong, ambil URL apa saja yang memiliki tipe audio
+    if (!bestUrl && formats.length > 0) {
+      const fallback = formats.find(f => f.url && (f.mimeType || '').includes('audio'));
+      if (fallback) bestUrl = fallback.url;
+    }
+    
+    if (!bestUrl) {
+      return res.status(404).json({ error: 'No audio stream found', rawKeys: Object.keys(streamingData) });
+    }
+    
     res.json({ url: bestUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
