@@ -240,6 +240,7 @@ app.get('/api/home', async (req, res) => {
   }
 });
 // Tambahkan di dalam server.js milikmu
+// Pastikan endpoint ini ada di dalam server.js yang kamu deploy ke Vercel
 app.get('/api/stream-url', async (req, res) => {
   try {
     const videoId = String(req.query.videoId || '');
@@ -266,6 +267,7 @@ app.get('/api/stream-url', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
 app.get('/api/charts', async (req, res) => {
   try {
     const data = await cached('charts', 30 * 60 * 1000, async () => {
