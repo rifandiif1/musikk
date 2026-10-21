@@ -247,70 +247,26 @@ app.get('/api/stream-url', async (req, res) => {
     const videoId = String(req.query.videoId || '').trim();
     if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
 
-    // Menggunakan YouTube Client WebView/Embedded resmi yang tidak memerlukan dekripsi rumit
-    const response = await fetch(`https://www.youtube.com/youtubei/v1/player?prettyPrint=false`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-      },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: "WEB_EMBEDDED_PLAYER",
-            clientVersion: "1.20230330.01.00",
-            hl: "id",
-            gl: "ID"
-          }
-        },
-        videoId: videoId,
-        racyCheckOk: true,
-        contentCheckOk: true
-      })
-    });
+    const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const apiUrl = `https://api.betabotz.eu.org/api/download/ytmp3?apikey=RFSTOREPBG&url=${encodeURIComponent(ytUrl)}`;
 
-    if (!response.ok) throw new Error(`YouTube API returned status ${response.status}`);
-    const data = await response.json();
+    const response = await fetch(apiUrl);
+    if (!response.ok) throw new Error(`BetaBotz API returned status ${response.status}`);
+    
+    const json = await response.json();
+    
+    // Mengambil langsung dari properti result.mp3 sesuai contoh sukses
+    const audioUrl = json.result && json.result.mp3 ? json.result.mp3 : '';
 
-    const streamingData = data.streamingData || {};
-    const formats = [
-      ...(streamingData.adaptiveFormats || []),
-      ...(streamingData.formats || [])
-    ];
-
-    let bestUrl = '';
-    let maxBitrate = 0;
-
-    for (const fmt of formats) {
-      const mime = fmt.mimeType || '';
-      const url = fmt.url;
-      
-      // Cari format audio dengan bitrate tertinggi
-      if ((mime.startsWith('audio/') || mime.includes('mp4a') || mime.includes('opus')) && url) {
-        const bitrate = fmt.bitrate || 0;
-        const score = mime.includes('mp4a') ? bitrate + 300000 : bitrate;
-        if (score >= maxBitrate) {
-          maxBitrate = score;
-          bestUrl = url;
-        }
-      }
+    if (!audioUrl) {
+      return res.status(404).json({ error: 'No audio stream found in BetaBotz response', debug: json });
     }
 
-    if (!bestUrl && formats.length > 0) {
-      const fallback = formats.find(f => f.url);
-      if (fallback) bestUrl = fallback.url;
-    }
-
-    if (!bestUrl) {
-      return res.status(404).json({ error: 'No audio stream found' });
-    }
-
-    res.json({ url: bestUrl });
+    res.json({ url: audioUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
-
 
 app.get('/api/charts', async (req, res) => {
   try {
