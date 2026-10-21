@@ -241,65 +241,48 @@ app.get('/api/home', async (req, res) => {
 });
 // Tambahkan di dalam server.js milikmu
 // Pastikan endpoint ini ada di dalam server.js yang kamu deploy ke Vercel
+// Ganti isi endpoint /api/stream-url di server.js dengan ini:
 app.get('/api/stream-url', async (req, res) => {
   try {
     const videoId = String(req.query.videoId || '').trim();
     if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
-    
-    // Panggil InnerTube API YouTube player
-    const d = await yt('player', {
-      videoId: videoId,
-      context: {
-        client: {
-          clientName: "ANDROID_MUSIC",
-          clientVersion: "6.41.52",
-          hl: "id",
-          gl: "ID"
-        }
-      },
-      playbackContext: {
-        contentPlaybackContext: {
-          signatureTimestamp: 19700
-        }
-      }
-    });
 
-    const streamingData = d.streamingData || {};
-    // Gabungkan adaptiveFormats dan formats agar jangkauan pencarian audio lebih luas
-    const formats = [
-      ...(streamingData.adaptiveFormats || []),
-      ...(streamingData.formats || [])
+    // Menggunakan API publik Piped (Instance publik yang stabil)
+    const pipedInstances = [
+      'https://pipedapi.kavin.rocks',
+      'https://pipedapi.adminforge.de',
+      'https://api.piped.privacy.com.de'
     ];
-    
-    let bestUrl = '';
-    let maxBitrate = 0;
-    
-    for (const fmt of formats) {
-      const mime = fmt.mimeType || '';
-      const url = fmt.url || fmt.signatureCipher || fmt.cipher;
-      
-      // Cari yang berformat audio atau mengandung m4a/opus/mp4a
-      if ((mime.startsWith('audio/') || mime.includes('mp4a') || mime.includes('opus')) && url) {
-        const bitrate = fmt.bitrate || 0;
-        const score = mime.includes('mp4a') ? bitrate + 300000 : bitrate;
-        if (score >= maxBitrate) {
-          maxBitrate = score;
-          bestUrl = url;
+
+    let audioUrl = '';
+
+    for (const instance of pipedInstances) {
+      try {
+        const response = await fetch(`${instance}/streams/${videoId}`);
+        if (!response.ok) continue;
+        const data = await response.json();
+        
+        // Cari stream audio dengan kualitas terbaik
+        const audioStreams = data.audioStreams || [];
+        const bestAudio = audioStreams.reduce((prev, curr) => {
+          return (curr.bitrate > (prev?.bitrate || 0)) ? curr : prev;
+        }, null);
+
+        if (bestAudio && bestAudio.url) {
+          audioUrl = bestAudio.url;
+          break;
         }
+      } catch (err) {
+        // Coba instance berikutnya jika gagal
+        continue;
       }
     }
-    
-    // Jika masih kosong, ambil URL apa saja yang memiliki tipe audio
-    if (!bestUrl && formats.length > 0) {
-      const fallback = formats.find(f => f.url && (f.mimeType || '').includes('audio'));
-      if (fallback) bestUrl = fallback.url;
+
+    if (!audioUrl) {
+      return res.status(404).json({ error: 'No audio stream found from proxy' });
     }
-    
-    if (!bestUrl) {
-      return res.status(404).json({ error: 'No audio stream found', rawKeys: Object.keys(streamingData) });
-    }
-    
-    res.json({ url: bestUrl });
+
+    res.json({ url: audioUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
