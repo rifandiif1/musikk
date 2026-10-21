@@ -247,42 +247,65 @@ app.get('/api/stream-url', async (req, res) => {
     const videoId = String(req.query.videoId || '').trim();
     if (!videoId) return res.status(400).json({ error: 'Missing videoId' });
 
-    // Menggunakan API publik Piped (Instance publik yang stabil)
-    const pipedInstances = [
-      'https://pipedapi.kavin.rocks',
-      'https://pipedapi.adminforge.de',
-      'https://api.piped.privacy.com.de'
+    // Menggunakan YouTube Client WebView/Embedded resmi yang tidak memerlukan dekripsi rumit
+    const response = await fetch(`https://www.youtube.com/youtubei/v1/player?prettyPrint=false`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: "WEB_EMBEDDED_PLAYER",
+            clientVersion: "1.20230330.01.00",
+            hl: "id",
+            gl: "ID"
+          }
+        },
+        videoId: videoId,
+        racyCheckOk: true,
+        contentCheckOk: true
+      })
+    });
+
+    if (!response.ok) throw new Error(`YouTube API returned status ${response.status}`);
+    const data = await response.json();
+
+    const streamingData = data.streamingData || {};
+    const formats = [
+      ...(streamingData.adaptiveFormats || []),
+      ...(streamingData.formats || [])
     ];
 
-    let audioUrl = '';
+    let bestUrl = '';
+    let maxBitrate = 0;
 
-    for (const instance of pipedInstances) {
-      try {
-        const response = await fetch(`${instance}/streams/${videoId}`);
-        if (!response.ok) continue;
-        const data = await response.json();
-        
-        // Cari stream audio dengan kualitas terbaik
-        const audioStreams = data.audioStreams || [];
-        const bestAudio = audioStreams.reduce((prev, curr) => {
-          return (curr.bitrate > (prev?.bitrate || 0)) ? curr : prev;
-        }, null);
-
-        if (bestAudio && bestAudio.url) {
-          audioUrl = bestAudio.url;
-          break;
+    for (const fmt of formats) {
+      const mime = fmt.mimeType || '';
+      const url = fmt.url;
+      
+      // Cari format audio dengan bitrate tertinggi
+      if ((mime.startsWith('audio/') || mime.includes('mp4a') || mime.includes('opus')) && url) {
+        const bitrate = fmt.bitrate || 0;
+        const score = mime.includes('mp4a') ? bitrate + 300000 : bitrate;
+        if (score >= maxBitrate) {
+          maxBitrate = score;
+          bestUrl = url;
         }
-      } catch (err) {
-        // Coba instance berikutnya jika gagal
-        continue;
       }
     }
 
-    if (!audioUrl) {
-      return res.status(404).json({ error: 'No audio stream found from proxy' });
+    if (!bestUrl && formats.length > 0) {
+      const fallback = formats.find(f => f.url);
+      if (fallback) bestUrl = fallback.url;
     }
 
-    res.json({ url: audioUrl });
+    if (!bestUrl) {
+      return res.status(404).json({ error: 'No audio stream found' });
+    }
+
+    res.json({ url: bestUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
