@@ -41,9 +41,8 @@ function applyTint(key) {
   const main = $('#main');
   if (main) main.style.setProperty('--tint', hueFrom(key));
 }
-function currentTheme() {
-  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-}
+function currentTheme() { return 'dark'; }
+
 function updateThemeIcon() {
   const use = $('#theme-ic use');
   if (use) use.setAttribute('href', currentTheme() === 'light' ? '#i-moon' : '#i-sun');
@@ -51,10 +50,11 @@ function updateThemeIcon() {
   if (meta) meta.setAttribute('content', currentTheme() === 'light' ? '#ebebeb' : '#000000');
 }
 function toggleTheme() {
-  const next = currentTheme() === 'light' ? 'dark' : 'light';
-  document.documentElement.setAttribute('data-theme', next);
-  store.set('theme', next);
+  // Rich Music uses a deliberately monochrome, always-dark interface.
+  document.documentElement.setAttribute('data-theme', 'dark');
+  store.set('theme', 'dark');
   updateThemeIcon();
+  toast('Dark theme enabled');
 }
 function openNowPlaying() {
   $('#nowplaying').classList.remove('hidden');
@@ -1908,8 +1908,8 @@ function restoreLibrary() {
         if (d.stats && typeof d.stats === 'object' && !Array.isArray(d.stats)) store.set('stats', d.stats);
         if (d.settings && typeof d.settings === 'object') {
           if (d.settings.theme === 'light' || d.settings.theme === 'dark') {
-            store.set('theme', d.settings.theme);
-            document.documentElement.setAttribute('data-theme', d.settings.theme);
+            store.set('theme', 'dark');
+            document.documentElement.setAttribute('data-theme', 'dark');
             updateThemeIcon();
           }
           if (typeof d.settings.vol === 'number') {
@@ -3060,14 +3060,14 @@ function setSidebarCollapsed(collapsed, persist = true) {
 setSidebarCollapsed(store.get('sidebar_collapsed', false), false);
 sidebarToggle?.addEventListener('click', () => setSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed')));
 
-let lyricFontSize = Math.min(56, Math.max(20, Number(store.get('lyrics_font_size', 28)) || 28));
+let lyricFontSize = Math.min(96, Math.max(20, Number(store.get('lyrics_font_size', 32)) || 32));
 function applyLyricsFontSize() {
   document.documentElement.style.setProperty('--lyrics-size', `${lyricFontSize}px`);
   store.set('lyrics_font_size', lyricFontSize);
 }
 applyLyricsFontSize();
-$('#lyrics-smaller')?.addEventListener('click', () => { lyricFontSize = Math.max(20, lyricFontSize - 3); applyLyricsFontSize(); });
-$('#lyrics-larger')?.addEventListener('click', () => { lyricFontSize = Math.min(56, lyricFontSize + 3); applyLyricsFontSize(); });
+$('#lyrics-smaller')?.addEventListener('click', () => { lyricFontSize = Math.max(20, lyricFontSize - 4); applyLyricsFontSize(); });
+$('#lyrics-larger')?.addEventListener('click', () => { lyricFontSize = Math.min(96, lyricFontSize + 4); applyLyricsFontSize(); });
 const lyricsFocusButton = $('#lyrics-focus');
 function setLyricsFocus(enabled) {
   document.body.classList.toggle('lyrics-focus', !!enabled);

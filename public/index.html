@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="id" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -15,8 +15,8 @@
 <link rel="stylesheet" href="styles.css" />
 <script>
 try {
-  var t = JSON.parse(localStorage.getItem('smw_theme') || '"dark"');
-  document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', 'dark');
+  localStorage.setItem('smw_theme', '"dark"');
 } catch (e) {}
 </script>
 </head>
@@ -110,7 +110,7 @@ try {
       </button>
       <div class="tb-actions">
         <button id="sidebar-toggle" class="tb-btn" title="Hide sidebar" aria-label="Hide sidebar" aria-pressed="false"><svg class="ic"><use href="#i-library"/></svg></button>
-        <button id="theme-toggle" class="tb-btn" title="Toggle theme">
+        <button id="theme-toggle" class="tb-btn" title="Dark theme is always on" aria-label="Dark theme is always on">
           <svg class="ic" id="theme-ic"><use href="#i-sun"/></svg>
         </button>
       </div>
