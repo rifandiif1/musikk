@@ -405,7 +405,7 @@ function restoreQueue() {
   renderPlayButtons();
   $('#miniplayer').classList.remove('hidden');
   document.body.classList.add('has-player', 'paused');
-  document.title = `${s.title} • Rich Music`;
+  document.title = `${songTitleArtist(s.title, s.artist)} • Rich Music`;
   applyTint(s.videoId || s.title);
   const shOn = Player.shuffle;
   $('#mini-shuffle') && $('#mini-shuffle').classList.toggle('on', shOn);
@@ -450,7 +450,7 @@ function startCurrent() {
   };
   tryPlay();
   Library.pushHistory(s);
-  Player.lyrics = { synced: null, plain: null, source: null, lines: [] };
+  Player.lyrics = { synced: null, plain: null, source: null, lines: [], translations: null, translationState: 'idle' };
   Player._lyricsRetried = false;
   Player._lyricsDur = 0;
   lastLyricIdx = -1;
@@ -460,11 +460,11 @@ function startCurrent() {
   updateLikeButtons();
   $('#miniplayer').classList.remove('hidden');
   document.body.classList.add('has-player');
-  document.title = `${s.title} • Rich Music`;
+  document.title = `${songTitleArtist(s.title, s.artist)} • Rich Music`;
   applyTint(s.videoId || s.title);
   if ('mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: s.title, artist: s.artist || '',
+      title: songTitleArtist(s.title, s.artist), artist: s.artist || '',
       artwork: s.thumbnail ? [{ src: s.thumbnail, sizes: '544x544' }] : [],
     });
     navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
@@ -677,7 +677,7 @@ async function loadLyrics(song, { silent = false } = {}) {
     Player.lyrics = { ...d, lines: d.synced ? parseLRC(d.synced) : [] };
   } catch {
     if (myReq !== lyricsReqId) return;
-    if (!Player.lyrics.synced && !Player.lyrics.plain) Player.lyrics = { synced: null, plain: null, source: null, lines: [] };
+    if (!Player.lyrics.synced && !Player.lyrics.plain) Player.lyrics = { synced: null, plain: null, source: null, lines: [], translations: null, translationState: 'idle' };
   }
   renderLyrics();
 }
@@ -709,11 +709,17 @@ function renderLyrics() {
   const c = $('#lyrics-container');
   const src = $('#lyrics-source');
   const L = Player.lyrics;
+  const lyricTitle = $('#lyrics-track-title');
+  const lyricSong = focusedSong();
+  if (lyricTitle) lyricTitle.textContent = lyricSong ? songTitleArtist(lyricSong.title, lyricSong.artist) : 'LYRICS';
   if (L.lines.length) {
-    c.innerHTML = L.lines.map((l, i) => `<div class="lyric-line" data-i="${i}" data-t="${l.t}">${esc(l.text) || '♪'}</div>`).join('');
-    $$('.lyric-line', c).forEach((el) => el.addEventListener('click', () => { Player.yt.seekTo(parseFloat(el.dataset.t)); Player.yt.playVideo(); }));
+    c.innerHTML = L.lines.map((l, i) => `<div class="lyric-line-wrap"><div class="lyric-line" data-i="${i}" data-t="${l.t}">${esc(l.text) || '♪'}</div>${L.translations && L.translations[i] ? `<div class="lyric-translation">${esc(L.translations[i])}</div>` : ''}</div>`).join('');
+    $$('.lyric-line', c).forEach((el) => el.addEventListener('click', () => {
+      const t = parseFloat(el.dataset.t);
+      if (Player.yt && Player.ready) { Player.yt.seekTo(t, true); Player.yt.playVideo(); }
+    }));
   } else if (L.plain) {
-    c.innerHTML = `<div class="lyric-plain">${esc(L.plain)}</div>`;
+    c.innerHTML = `<div class="lyric-plain">${esc(L.plain)}</div>${L.translatedPlain ? `<div class="lyric-plain-translation">${esc(L.translatedPlain)}</div>` : ''}`;
   } else {
     c.innerHTML = `<div class="lyrics-empty">No lyrics found for this track<br><br>
       <button class="pill-btn" id="lyrics-retry">${icon('i-repeat')}<span>Try again</span></button></div>`;
@@ -727,8 +733,10 @@ function renderLyrics() {
   lastLyricIdx = -1;
   if (L.lines.length) {
     $('#np-lyric-preview').textContent = '';
+    if (L.translationState !== 'done' && L.translationState !== 'loading') setTimeout(translateLyricsToIndonesian, 0);
     syncFloatLyric('');
   } else if (L.plain) {
+    if (L.translationState !== 'done' && L.translationState !== 'loading') setTimeout(translateLyricsToIndonesian, 0);
     const first = String(L.plain).split('\n').map((x) => x.trim()).find(Boolean) || '';
     $('#np-lyric-preview').textContent = first;
     syncFloatLyric(first);
@@ -738,6 +746,45 @@ function renderLyrics() {
   }
 }
 let lastLyricIdx = -1;
+async function translateLyricsToIndonesian() {
+  const L = Player.lyrics;
+  if (!L || L.translationState === 'loading' || L.translationState === 'done' || (!L.lines.length && !L.plain)) return;
+  const lyricLines = L.lines.length ? L.lines.map((x) => x.text || '') : String(L.plain || '').split('\n');
+  const sourceText = lyricLines.join('\n').trim();
+  if (!sourceText) return;
+  L.translationState = 'loading';
+  const status = $('#lyrics-translation-status');
+  if (status) status.textContent = 'Menerjemahkan…';
+  try {
+    const chunks = []; let chunk = []; let size = 0;
+    lyricLines.forEach((line, i) => {
+      const add = line.length + 1;
+      if (chunk.length && size + add > 2800) { chunks.push({ start: i - chunk.length, lines: chunk }); chunk = []; size = 0; }
+      chunk.push(line); size += add;
+    });
+    if (chunk.length) chunks.push({ start: lyricLines.length - chunk.length, lines: chunk });
+    const translated = new Array(lyricLines.length).fill('');
+    for (const part of chunks) {
+      const q = part.lines.join('\n');
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=id&dt=t&q=${encodeURIComponent(q)}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('translation unavailable');
+      const data = await response.json();
+      const text = (data[0] || []).map((row) => row[0] || '').join('');
+      const lines = text.split('\n');
+      part.lines.forEach((_, j) => { translated[part.start + j] = (lines[j] || '').trim(); });
+    }
+    if (L.lines.length) L.translations = translated;
+    else L.translatedPlain = translated.join('\n');
+    L.translationState = 'done';
+    renderLyrics();
+    if (status) status.textContent = 'Terjemahan Indonesia';
+  } catch {
+    L.translationState = 'error';
+    if (status) status.textContent = 'Terjemahan tidak tersedia';
+    const retry = $('#lyrics-translate'); if (retry) retry.textContent = 'Coba terjemahkan lagi';
+  }
+}
 function updateLyricHighlight(cur) {
   const L = Player.lyrics;
   if (!L.lines.length) return;
@@ -1101,6 +1148,11 @@ function normalizeSong(s) {
   if (!s) return s;
   return { ...s, title: displayTitle(s.title) };
 }
+function songTitleArtist(title, artist) {
+  const t = displayTitle(title) || String(title || '').trim();
+  const a = String(artist || '').trim();
+  return a && a.toLowerCase() !== t.toLowerCase() ? `${t} - ${a}` : t;
+}
 function songFromItem(it) {
   const artists = it.artists || [];
   const artistBrowseId = it.artistBrowseId || (artists[0] && artists[0].browseId) || '';
@@ -1143,7 +1195,7 @@ function trackRowHTML(it, playing = false, extraBtn = '') {
     <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
     ${tn}${qn}
     ${coverHTML(it.thumbnail, 'track')}
-    <div class="tmeta"><div class="tt">${esc(displayTitle(it.title))}</div><div class="ts">${esc(it.artist || it.subtitle || '')}</div></div>
+    <div class="tmeta"><div class="tt">${esc(songTitleArtist(it.title, it.artist || it.subtitle || ''))}</div><div class="ts">${esc(it.album || '')}</div></div>
     ${it.duration ? `<span class="tdur">${esc(it.duration)}</span>` : ''}
     <button class="tbtn btn-fav" title="Favorite">${icon(Library.isFav(it.videoId) ? 'i-heart-f' : 'i-heart-o')}</button>
     <button class="tbtn btn-queue" title="Add to queue">${icon('i-queue')}</button>
@@ -1237,7 +1289,7 @@ function bindItems(root) {
     el.addEventListener('click', (e) => {
       if (e.target.closest('.tbtn')) return;
       if (it.browseId && (it.type === 'album' || it.type === 'playlist' || it.type === 'artist')) openItem(it);
-      else if (it.videoId) openSongNowPlaying(songFromItem(it));
+      else if (it.videoId) { playSong(songFromItem(it)); openNowPlaying(); switchNPTab('player'); }
       else openItem(it);
     });
     const favBtn = $('.btn-fav', el);
@@ -1274,7 +1326,7 @@ function openItem(it) {
     closeNowPlaying();
     return go(`#/playlist/${String(it.playlistId).startsWith('VL') ? it.playlistId : 'VL' + it.playlistId}`);
   }
-  if (it.videoId) return openSongNowPlaying(songFromItem(it));
+  if (it.videoId) { playSong(songFromItem(it)); openNowPlaying(); switchNPTab('player'); return; }
   if (it.playlistId) {
     closeNowPlaying();
     return go(`#/playlist/${String(it.playlistId).startsWith('VL') ? it.playlistId : 'VL' + it.playlistId}`);
@@ -1508,7 +1560,7 @@ function topResultHTML(it) {
     ${coverHTML(it.thumbnail, 'sr')}
     <div class="sr-meta">
       <div class="sr-kicker">Top result</div>
-      <div class="sr-title">${esc(displayTitle(it.title) || it.title)}</div>
+      <div class="sr-title">${esc(it.videoId ? songTitleArtist(it.title, it.artist || it.subtitle || '') : (displayTitle(it.title) || it.title))}</div>
       <div class="sr-sub">${esc(it.subtitle || it.artist || '')}</div>
       <span class="pill-btn primary">${icon(ic)}<span>${cta}</span></span>
     </div>
@@ -3057,10 +3109,11 @@ function setSidebarCollapsed(collapsed, persist = true) {
   }
   if (persist) store.set('sidebar_collapsed', !!collapsed);
 }
-setSidebarCollapsed(store.get('sidebar_collapsed', false), false);
+setSidebarCollapsed(true, false);
+store.set('sidebar_collapsed', true);
 sidebarToggle?.addEventListener('click', () => setSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed')));
 
-let lyricFontSize = Math.min(96, Math.max(20, Number(store.get('lyrics_font_size', 32)) || 32));
+let lyricFontSize = Math.min(96, Math.max(20, Number(store.get('lyrics_font_size', 40)) || 40));
 function applyLyricsFontSize() {
   document.documentElement.style.setProperty('--lyrics-size', `${lyricFontSize}px`);
   store.set('lyrics_font_size', lyricFontSize);
@@ -3068,6 +3121,7 @@ function applyLyricsFontSize() {
 applyLyricsFontSize();
 $('#lyrics-smaller')?.addEventListener('click', () => { lyricFontSize = Math.max(20, lyricFontSize - 4); applyLyricsFontSize(); });
 $('#lyrics-larger')?.addEventListener('click', () => { lyricFontSize = Math.min(96, lyricFontSize + 4); applyLyricsFontSize(); });
+$('#lyrics-translate')?.addEventListener('click', () => { if (Player.lyrics) Player.lyrics.translationState = 'idle'; translateLyricsToIndonesian(); });
 const lyricsFocusButton = $('#lyrics-focus');
 function setLyricsFocus(enabled) {
   document.body.classList.toggle('lyrics-focus', !!enabled);
