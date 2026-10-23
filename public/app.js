@@ -73,6 +73,17 @@ function closeNowPlaying() {
   renderPlayButtons();
   updateLikeButtons();
 }
+// Minimize the full-screen player without stopping the music, then return to Home.
+function minimizeNowPlaying() {
+  document.body.classList.remove('lyrics-focus');
+  $('#nowplaying').classList.add('hidden');
+  document.body.classList.remove('np-open');
+  // Keep the current track and playback state intact; only dismiss the overlay.
+  if (location.hash !== '#/home') location.hash = '#/home';
+  renderNowPlaying();
+  renderPlayButtons();
+  updateLikeButtons();
+}
 function focusedSong() { return Player.pending || Player.current; }
 function isPreviewing() {
   return !!(Player.pending && (!Player.current || Player.pending.videoId !== Player.current.videoId));
@@ -758,7 +769,8 @@ function renderLyrics() {
       loadLyrics(Player.current);
     });
   }
-  src.textContent = L.source ? `Lyrics provided by ${L.source}` : '';
+  // Keep provider attribution out of the lyric-reading UI.
+  if (src) src.textContent = ''; 
   lastLyricIdx = -1;
   lastActiveWordEl = null;
   if (L.lines.length) {
@@ -826,6 +838,23 @@ async function translateLyricsToIndonesian() {
   }
 }
 let lastActiveWordEl = null;
+function scrollLyricWithinContainer(active) {
+  // Scroll only the lyrics viewport. Element.scrollIntoView() can scroll the document
+  // itself, which makes the player header and its controls disappear during karaoke.
+  const container = $('#lyrics-container');
+  if (!container || !active || !container.contains(active)) return;
+  const itemTop = active.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+  const itemBottom = itemTop + active.getBoundingClientRect().height;
+  const viewTop = container.scrollTop;
+  const viewBottom = viewTop + container.clientHeight;
+  const margin = Math.min(container.clientHeight * 0.34, 180);
+  if (itemTop < viewTop + margin) {
+    container.scrollTop = Math.max(0, itemTop - margin);
+  } else if (itemBottom > viewBottom - margin) {
+    container.scrollTop = itemBottom - container.clientHeight + margin;
+  }
+}
+
 function updateLyricHighlight(cur) {
   const L = Player.lyrics;
   if (!L.lines.length) return;
@@ -854,7 +883,7 @@ function updateLyricHighlight(cur) {
     if (active) {
       active.classList.add('active');
       active.classList.remove('past');
-      if ($('#np-lyrics').classList.contains('active')) active.scrollIntoView({ block: 'center', behavior: 'auto' });
+      if ($('#np-lyrics').classList.contains('active')) scrollLyricWithinContainer(active);
     }
     lastActiveWordEl?.classList.remove('word-active');
     lastActiveWordEl = null;
@@ -879,6 +908,30 @@ function updateLyricHighlight(cur) {
 }
 
 /* ================= now playing UI ================= */
+function renderNPUpNext() {
+  const host = $('#np-upnext-list');
+  if (!host) return;
+  const upcoming = Player.queue.map((song, index) => ({ song, index })).filter((item) => item.index > Player.index).slice(0, 4);
+  if (!upcoming.length) {
+    host.innerHTML = '<div class="np-upnext-empty">Belum ada lagu berikutnya. Putar musik atau tambahkan lagu ke antrean.</div>';
+    return;
+  }
+  host.innerHTML = upcoming.map(({ song, index }, n) => {
+    const title = displayTitle(song.title) || song.title || 'Untitled';
+    const artist = song.artist || song.subtitle || 'Unknown artist';
+    return `<button type="button" class="np-upnext-item" data-np-qi="${index}" title="Putar ${esc(title)}">
+      <span class="np-upnext-index">${String(n + 1).padStart(2, '0')}</span>
+      <img src="${esc(safeCover(song.thumbnail) || COVER_PH)}" alt="" loading="lazy" />
+      <span class="np-upnext-copy"><strong>${esc(title)}</strong><small>${esc(artist)}</small></span>
+      <span class="np-upnext-play">${icon('i-play')}</span>
+    </button>`;
+  }).join('');
+  host.querySelectorAll('[data-np-qi]').forEach((button) => button.addEventListener('click', () => {
+    const index = Number(button.dataset.npQi);
+    const song = Player.queue[index];
+    if (song) playSong(song, Player.queue, index);
+  }));
+}
 function renderNowPlaying() {
   const mini = Player.current;
   const np = Player.pending || Player.current;
@@ -901,6 +954,7 @@ function renderNowPlaying() {
   artEl.textContent = np.artist || np.subtitle || '';
   artEl.classList.toggle('linkish', !!(songArtistBrowseId(np) || (np.artist || '').trim()));
   $('#np-bg').style.backgroundImage = np.thumbnail ? `url("${np.thumbnail}")` : 'none';
+  renderNPUpNext();
   syncFloatWidget();
 }
 function updateLikeButtons() {
@@ -970,6 +1024,7 @@ function updateQueueTab() {
   });
 }
 function renderQueue() {
+  renderNPUpNext();
   updateQueueTab();
   renderSideQueue();
   persistQueue();
@@ -2619,7 +2674,7 @@ $('#mini-bar').addEventListener('click', (e) => {
   const dur = Player.yt.getDuration() || 0;
   if (dur) Player.yt.seekTo(frac * dur, true);
 });
-$('#np-close').addEventListener('click', closeNowPlaying);
+$('#np-close').addEventListener('click', minimizeNowPlaying);
 $('#np-play').addEventListener('click', toggleNowPlayingPlay);
 $('#np-next').addEventListener('click', () => nextTrack(false));
 $('#np-prev').addEventListener('click', prevTrack);
@@ -2695,7 +2750,10 @@ function switchNPTab(name) {
   if (name === 'related') loadRelated();
   if (name === 'lyrics') {
     lastLyricIdx = -2;
-    // Lyrics view is dedicated to reading/karaoke. Editing lives in a separate Lyrics Studio dialog.
+    // Lyrics opens directly in the immersive karaoke view; no extra Full screen click needed.
+    setLyricsFocus(true);
+  } else if (document.body.classList.contains('lyrics-focus')) {
+    setLyricsFocus(false);
   }
   if (name === 'queue') renderQueue();
 }
@@ -2710,8 +2768,8 @@ document.addEventListener('keydown', (e) => {
   else if (e.code === 'ArrowLeft' && e.shiftKey) { e.preventDefault(); prevTrack(); }
   else if (e.code === 'ArrowRight' && Player.yt && Player.ready && !e.shiftKey) { e.preventDefault(); Player.yt.seekTo(Math.min((Player.yt.getDuration() || 0), (Player.yt.getCurrentTime() || 0) + 5), true); }
   else if (e.code === 'ArrowLeft' && Player.yt && Player.ready && !e.shiftKey) { e.preventDefault(); Player.yt.seekTo(Math.max(0, (Player.yt.getCurrentTime() || 0) - 5), true); }
-  else if (e.code === 'Escape') { if (document.body.classList.contains('lyrics-focus')) setLyricsFocus(false); else closeNowPlaying(); }
-  else if (e.code === 'KeyL') { const wasHidden = $('#nowplaying').classList.contains('hidden'); if (wasHidden) { openNowPlaying(); switchNPTab('lyrics'); setLyricsFocus(true); } else { switchNPTab('lyrics'); setLyricsFocus(!document.body.classList.contains('lyrics-focus')); } }
+  else if (e.code === 'Escape') { if (document.body.classList.contains('lyrics-focus')) setLyricsFocus(false); else minimizeNowPlaying(); }
+  else if (e.code === 'KeyL') { const wasHidden = $('#nowplaying').classList.contains('hidden'); if (wasHidden) { openNowPlaying(); switchNPTab('lyrics'); } else if (document.body.classList.contains('lyrics-focus')) { setLyricsFocus(false); } else { switchNPTab('lyrics'); } }
   else if (e.code === 'KeyE') { if ($('#nowplaying').classList.contains('hidden')) { openNowPlaying(); switchNPTab('lyrics'); } openLyricsStudio('editor'); }
   else if (e.code === 'KeyP') { e.preventDefault(); toggleFloatWidget(); }
   else if (e.code === 'KeyM' && Player.yt && Player.ready) {
@@ -3234,7 +3292,7 @@ function setLyricsFocus(enabled) {
     document.body.classList.add('np-open');
     $$('.np-tab').forEach((b) => b.classList.toggle('active', b.dataset.nptab === 'lyrics'));
     $$('.np-pane').forEach((pane) => pane.classList.toggle('active', pane.id === 'np-lyrics'));
-    setTimeout(() => { const active = $('#lyrics-container .lyric-line.active'); if (active) active.scrollIntoView({block:'center', behavior:'auto'}); }, 0);
+    setTimeout(() => { const active = $('#lyrics-container .lyric-line.active'); if (active) scrollLyricWithinContainer(active); }, 0);
   }
 }
 lyricsFocusButton?.addEventListener('click', () => setLyricsFocus(!document.body.classList.contains('lyrics-focus')));

@@ -162,7 +162,7 @@ try {
     <div class="np-inner">
       <div class="np-handle" aria-hidden="true"></div>
       <div class="np-topbar">
-        <button id="np-close" class="icon-btn" title="Tutup pemutar layar penuh" aria-label="Tutup pemutar"><svg class="ic"><use href="#i-chev-down"/></svg></button>
+        <button id="np-close" class="icon-btn" title="Minimalkan pemutar dan kembali ke Home" aria-label="Minimalkan pemutar, kembali ke Home"><svg class="ic"><use href="#i-chev-down"/></svg></button>
         <span class="np-caption">Now Playing</span>
         <button id="np-sleep" class="icon-btn" title="Sleep timer"><svg class="ic"><use href="#i-clock"/></svg></button>
       </div>
@@ -208,6 +208,12 @@ try {
             </div>
           </div>
           <div id="np-lyric-preview" title="Open lyrics"></div>
+          <aside id="np-side-panel" class="np-side-panel" aria-label="Up next">
+            <div class="np-side-heading"><span class="np-side-kicker">YOUR SESSION</span><span class="np-live-dot"></span></div>
+            <div class="np-side-title">Up next</div>
+            <div id="np-upnext-list" class="np-upnext-list"><div class="np-upnext-empty">Lagu berikutnya akan muncul di sini.</div></div>
+            <div class="np-side-footer"><span class="np-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span>Keep the music going</span></div>
+          </aside>
         </section>
         <section id="np-lyrics" class="np-pane">
           <div class="lyrics-toolbar" aria-label="Lyrics controls">
@@ -218,7 +224,7 @@ try {
               <button type="button" id="lyrics-translate" class="lyrics-tool" title="Terjemahkan lirik ke Bahasa Indonesia" aria-label="Terjemahkan lirik ke Bahasa Indonesia">ID ↻</button>
               <button type="button" id="lyrics-smaller" class="lyrics-tool" title="Smaller lyrics" aria-label="Smaller lyrics">A−</button>
               <button type="button" id="lyrics-larger" class="lyrics-tool" title="Larger lyrics" aria-label="Larger lyrics">A+</button>
-              <button type="button" id="lyrics-focus" class="lyrics-tool lyrics-focus-btn" title="Full-screen lyrics" aria-label="Full-screen lyrics"><svg class="ic"><use href="#i-expand"/></svg><span>Full screen</span></button>
+              <button type="button" id="lyrics-focus" class="lyrics-tool lyrics-focus-btn" title="Toggle immersive lyrics" aria-label="Toggle immersive lyrics"><svg class="ic"><use href="#i-expand"/></svg><span>Immersive</span></button>
             </div>
           </div>
           
