@@ -1695,3 +1695,16 @@ body.lyrics-studio-open { overflow:hidden; }
 @media (prefers-reduced-motion: reduce) {
   .home-cta, .quick-card { transition:none; }
 }
+
+/* ---------- Player visibility polish: only reserve space when a track is active ---------- */
+#miniplayer {
+  animation: player-bar-enter .24s cubic-bezier(.2,.75,.25,1) both;
+}
+#miniplayer.hidden { display: none; }
+@keyframes player-bar-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #miniplayer { animation: none; }
+}

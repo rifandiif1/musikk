@@ -410,9 +410,12 @@ function restoreQueue() {
   renderQueue();
   updateLikeButtons();
   renderPlayButtons();
-  $('#miniplayer').classList.remove('hidden');
-  document.body.classList.add('has-player', 'paused');
-  document.title = `${songTitleArtist(s.title, s.artist)} • Rich Music`;
+  // Restore the queue silently: don't occupy the bottom of the screen until
+  // the user actively starts/selects a track in this session.
+  $('#miniplayer').classList.add('hidden');
+  document.body.classList.remove('has-player');
+  document.body.classList.add('paused');
+  document.title = 'Rich Music';
   applyTint(s.videoId || s.title);
   const shOn = Player.shuffle;
   $('#mini-shuffle') && $('#mini-shuffle').classList.toggle('on', shOn);
