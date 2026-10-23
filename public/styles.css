@@ -1927,3 +1927,60 @@ body.lyrics-focus #nowplaying .lyrics-toolbar { padding-top:8px; }
   .home-section-note { display:none; }
 }
 
+
+/* v18 — clean, left-aligned Related pane in Now Playing; remove secondary card clutter. */
+#np-related.active {
+  align-items: stretch;
+  justify-content: flex-start;
+  text-align: left;
+}
+#np-related #related-list {
+  width: 100%;
+  padding: 4px 0 18px;
+  text-align: left;
+}
+#np-related #related-list .shelf {
+  width: 100%;
+  margin: 0 0 18px;
+  text-align: left;
+}
+#np-related #related-list .shelf-title {
+  text-align: left;
+  margin: 0 0 10px;
+  padding: 0 2px;
+}
+#np-related #related-list .track-list {
+  width: 100%;
+}
+#np-related #related-list .carousel-wrap {
+  width: 100%;
+  margin: 0;
+}
+#np-related #related-list .carousel {
+  justify-content: flex-start;
+  padding: 0 0 4px;
+  gap: 8px;
+}
+#np-related #related-list .car-btn,
+#np-related #related-list .card .s,
+#np-related #related-list .card .play-ov {
+  display: none !important;
+}
+#np-related #related-list .card {
+  text-align: left;
+  align-items: flex-start;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border: 0;
+}
+#np-related #related-list .card .t {
+  text-align: left;
+  width: 100%;
+  margin-top: 7px;
+}
+@media (min-width: 1100px) {
+  #nowplaying #np-related .np-pane,
+  #nowplaying #np-related.active { align-items: stretch; text-align: left; }
+  #nowplaying #np-related #related-list { padding-left: 0; padding-right: 0; }
+}
