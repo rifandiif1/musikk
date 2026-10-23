@@ -410,12 +410,9 @@ function restoreQueue() {
   renderQueue();
   updateLikeButtons();
   renderPlayButtons();
-  // Restore the queue silently: don't occupy the bottom of the screen until
-  // the user actively starts/selects a track in this session.
-  $('#miniplayer').classList.add('hidden');
-  document.body.classList.remove('has-player');
-  document.body.classList.add('paused');
-  document.title = 'Rich Music';
+  $('#miniplayer').classList.remove('hidden');
+  document.body.classList.add('has-player', 'paused');
+  document.title = `${songTitleArtist(s.title, s.artist)} • Rich Music`;
   applyTint(s.videoId || s.title);
   const shOn = Player.shuffle;
   $('#mini-shuffle') && $('#mini-shuffle').classList.toggle('on', shOn);
@@ -763,12 +760,13 @@ function renderLyrics() {
   }
   src.textContent = L.source ? `Lyrics provided by ${L.source}` : '';
   lastLyricIdx = -1;
+  lastActiveWordEl = null;
   if (L.lines.length) {
     $('#np-lyric-preview').textContent = '';
-    if (L.translationState !== 'done' && L.translationState !== 'loading') setTimeout(translateLyricsToIndonesian, 0);
+    // Translation is user-triggered to keep lyric loading fast.
     syncFloatLyric('');
   } else if (L.plain) {
-    if (L.translationState !== 'done' && L.translationState !== 'loading') setTimeout(translateLyricsToIndonesian, 0);
+    // Translation is user-triggered to avoid network work while opening lyrics.
     const first = String(L.plain).split('\n').map((x) => x.trim()).find(Boolean) || '';
     $('#np-lyric-preview').textContent = first;
     syncFloatLyric(first);
@@ -802,6 +800,16 @@ async function translateLyricsToIndonesian() {
       const response = await fetch(url);
       if (!response.ok) throw new Error('translation unavailable');
       const data = await response.json();
+      // Google Translate returns the detected source language as data[2].
+      // Keep Indonesian lyrics untouched instead of translating them into Indonesian again.
+      const detectedLanguage = String(data[2] || '').toLowerCase();
+      if (detectedLanguage === 'id' || detectedLanguage.startsWith('id-')) {
+        L.translations = null;
+        L.translatedPlain = null;
+        L.translationState = 'native';
+        if (status) status.textContent = 'Lirik Bahasa Indonesia';
+        return;
+      }
       const text = (data[0] || []).map((row) => row[0] || '').join('');
       const lines = text.split('\n');
       part.lines.forEach((_, j) => { translated[part.start + j] = (lines[j] || '').trim(); });
@@ -817,35 +825,54 @@ async function translateLyricsToIndonesian() {
     const retry = $('#lyrics-translate'); if (retry) retry.textContent = 'Coba terjemahkan lagi';
   }
 }
+let lastActiveWordEl = null;
 function updateLyricHighlight(cur) {
   const L = Player.lyrics;
   if (!L.lines.length) return;
-  let idx = -1;
-  for (let i = 0; i < L.lines.length; i++) { if (cur >= L.lines[i].t - 0.2) idx = i; else break; }
-  const c = $('#lyrics-container');
-  if (idx === lastLyricIdx) {
-    const current = c.querySelector('.lyric-line.active');
-    if (current) {
-      const words = $$('.lyric-word', current);
-      let activeWord = -1;
-      words.forEach((word, wi) => { if (cur >= Number(word.dataset.wt || 0)) activeWord = wi; });
-      words.forEach((word, wi) => word.classList.toggle('word-active', wi === activeWord));
-    }
-    return;
+  // LRC timestamps are ordered; binary search avoids scanning every line on every player tick.
+  let lo = 0, hi = L.lines.length - 1, idx = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (cur >= L.lines[mid].t - 0.2) { idx = mid; lo = mid + 1; }
+    else hi = mid - 1;
   }
-  lastLyricIdx = idx;
-  $$('.lyric-line', c).forEach((el, i) => {
-    el.classList.toggle('active', i === idx);
-    el.classList.toggle('past', i < idx);
-    if (i === idx) {
-      const words = $$('.lyric-word', el);
-      let activeWord = -1;
-      words.forEach((word, wi) => { if (cur >= Number(word.dataset.wt || 0)) activeWord = wi; });
-      words.forEach((word, wi) => word.classList.toggle('word-active', wi === activeWord));
-    } else $$('.lyric-word', el).forEach((word) => word.classList.remove('word-active'));
-  });
-  const active = c.querySelector('.lyric-line.active');
-  if (active && $('#np-lyrics').classList.contains('active')) active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const c = $('#lyrics-container');
+  if (idx !== lastLyricIdx) {
+    const oldIdx = lastLyricIdx;
+    const oldEl = oldIdx >= 0 ? c.querySelector(`.lyric-line[data-i="${oldIdx}"]`) : null;
+    if (oldEl) { oldEl.classList.remove('active'); oldEl.classList.toggle('past', oldIdx < idx); }
+    // Only touch lines whose past/future state actually changed, not every lyric line.
+    if (oldIdx < 0) {
+      for (let i = 0; i < idx; i++) c.querySelector(`.lyric-line[data-i="${i}"]`)?.classList.add('past');
+    } else if (idx > oldIdx) {
+      for (let i = oldIdx + 1; i < idx; i++) c.querySelector(`.lyric-line[data-i="${i}"]`)?.classList.add('past');
+    } else {
+      for (let i = idx + 1; i <= oldIdx; i++) c.querySelector(`.lyric-line[data-i="${i}"]`)?.classList.remove('past');
+    }
+    lastLyricIdx = idx;
+    const active = idx >= 0 ? c.querySelector(`.lyric-line[data-i="${idx}"]`) : null;
+    if (active) {
+      active.classList.add('active');
+      active.classList.remove('past');
+      if ($('#np-lyrics').classList.contains('active')) active.scrollIntoView({ block: 'center', behavior: 'auto' });
+    }
+    lastActiveWordEl?.classList.remove('word-active');
+    lastActiveWordEl = null;
+  }
+  const current = idx >= 0 ? c.querySelector(`.lyric-line[data-i="${idx}"]`) : null;
+  if (current) {
+    const words = current.querySelectorAll('.lyric-word');
+    let activeWord = null;
+    for (const word of words) {
+      if (cur >= Number(word.dataset.wt || 0)) activeWord = word;
+      else break;
+    }
+    if (activeWord !== lastActiveWordEl) {
+      lastActiveWordEl?.classList.remove('word-active');
+      activeWord?.classList.add('word-active');
+      lastActiveWordEl = activeWord;
+    }
+  }
   const line = idx >= 0 ? L.lines[idx].text : '';
   $('#np-lyric-preview').textContent = line;
   syncFloatLyric(line);
@@ -1524,36 +1551,9 @@ async function viewHome(view) {
   const pls = Library.playlists.filter((p) => p.tracks && p.tracks.length);
   const saved = Library.saved.slice(0, 12);
   const dateLine = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
-  const heroTrack = hist[0] || favs[0] || null;
-  const heroArt = heroTrack && heroTrack.thumbnail
-    ? `<img src="${esc(safeCover(heroTrack.thumbnail))}" alt="" loading="lazy">`
-    : `<div class="home-hero-placeholder">${icon('i-note')}</div>`;
-  let html = `
-    <section class="home-hero" aria-labelledby="home-hero-title">
-      <div class="home-hero-copy">
-        <div class="home-eyebrow"><span class="home-live-dot"></span> RICH MUSIC <span class="home-eyebrow-sep">/</span> YOUR SOUNDTRACK</div>
-        <div class="greeting">${esc(dateLine)}</div>
-        <h1 id="home-hero-title">${hist.length ? 'Pick up where <span>you left off.</span>' : 'Find your <span>next favorite.</span>'}</h1>
-        <p>${hist.length ? 'Your recent listens, favorite tracks, and new discoveries are right here.' : 'Explore music, discover new sounds, and build a library that feels like you.'}</p>
-        <div class="home-hero-actions">
-          <button type="button" class="home-cta home-cta-primary" data-home-go="#/search">${icon('i-search')} Explore music</button>
-          <button type="button" class="home-cta home-cta-secondary" data-home-go="#/charts">${icon('i-chart')} Explore charts</button>
-        </div>
-        <div class="home-hero-stats" aria-label="Your library summary">
-          <div><strong>${hist.length}</strong><span>Recent</span></div>
-          <i></i><div><strong>${favs.length}</strong><span>Favorites</span></div>
-          <i></i><div><strong>${pls.length}</strong><span>Playlists</span></div>
-        </div>
-      </div>
-      <div class="home-hero-visual" aria-hidden="true">
-        <div class="home-orbit home-orbit-one"></div><div class="home-orbit home-orbit-two"></div>
-        <div class="home-vinyl"><span></span></div>
-        <div class="home-hero-cover">${heroArt}<div class="home-cover-glint"></div></div>
-        <div class="home-visual-tag">${heroTrack ? `<span class="home-tag-dot"></span><span><b>BACK IN ROTATION</b><small>${esc(heroTrack.title || 'Recently played')}</small></span>` : `<span class="home-tag-dot"></span><span><b>YOUR NEXT DISCOVERY</b><small>Something good starts here</small></span>`}</div>
-      </div>
-    </section>`;
+  let html = `<div class="hello-row"><div><div class="greeting">${esc(dateLine)}</div><h1 class="page-title">${greet}</h1></div></div>`;
   if (hist.length) {
-    html += `<div class="shelf home-shelf"><div class="shelf-title"><span>Recently played</span><span class="home-section-note">Pick up the vibe</span></div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div></div>`;
+    html += `<div class="shelf-title">Recently played</div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div>`;
   }
   html += `<div id="mix-slot"></div>`;
   if (hist.length > 8) {
@@ -1578,7 +1578,6 @@ async function viewHome(view) {
   html += d.sections.map(shelfHTML).join('');
   view.innerHTML = html;
   bindItems(view);
-  $$('[data-home-go]', view).forEach((el) => el.addEventListener('click', () => go(el.dataset.homeGo)));
   $$('[data-pl]', view).forEach((el) => el.addEventListener('click', () => go(`#/localpl/${el.dataset.pl}`)));
   loadMixForYou();
 }
@@ -3211,7 +3210,16 @@ function applyLyricsFontSize() {
 applyLyricsFontSize();
 $('#lyrics-smaller')?.addEventListener('click', () => { lyricFontSize = Math.max(20, lyricFontSize - 4); applyLyricsFontSize(); });
 $('#lyrics-larger')?.addEventListener('click', () => { lyricFontSize = Math.min(96, lyricFontSize + 4); applyLyricsFontSize(); });
-$('#lyrics-translate')?.addEventListener('click', () => { if (Player.lyrics) Player.lyrics.translationState = 'idle'; translateLyricsToIndonesian(); });
+$('#lyrics-translate')?.addEventListener('click', () => {
+  if (Player.lyrics) {
+    Player.lyrics.translationState = 'idle';
+    Player.lyrics.translations = null;
+    Player.lyrics.translatedPlain = null;
+  }
+  const status = $('#lyrics-translation-status');
+  if (status) status.textContent = 'Menerjemahkan…';
+  translateLyricsToIndonesian();
+});
 const lyricsFocusButton = $('#lyrics-focus');
 function setLyricsFocus(enabled) {
   document.body.classList.toggle('lyrics-focus', !!enabled);
@@ -3221,8 +3229,6 @@ function setLyricsFocus(enabled) {
     const span = lyricsFocusButton.querySelector('span');
     if (span) span.textContent = enabled ? 'Exit full screen' : 'Full screen';
   }
-  const caption = $('#nowplaying .np-caption');
-  if (caption) caption.textContent = enabled ? 'LYRICS' : 'NOW PLAYING';
   if (enabled) {
     $('#nowplaying').classList.remove('hidden');
     document.body.classList.add('np-open');
@@ -3420,7 +3426,7 @@ function openKeyboardHelp() {
 $('#keyboard-help')?.addEventListener('click', openKeyboardHelp);
 
 function applyLyricsStyle() {
-  const align = store.get('lyrics_align', 'center');
+  const align = store.get('lyrics_align', 'left');
   const color = store.get('lyrics_color', '#ffffff');
   document.documentElement.style.setProperty('--lyrics-align', align);
   document.documentElement.style.setProperty('--lyrics-color', color);
@@ -3429,7 +3435,7 @@ function applyLyricsStyle() {
 }
 $('#lyrics-align')?.addEventListener('change', e => { store.set('lyrics_align', e.target.value); applyLyricsStyle(); });
 $('#lyrics-color')?.addEventListener('input', e => { store.set('lyrics_color', e.target.value); applyLyricsStyle(); });
-$('#lyrics-style-reset')?.addEventListener('click', () => { store.set('lyrics_align','center'); store.set('lyrics_color','#ffffff'); applyLyricsStyle(); toast('Tampilan lirik direset'); });
+$('#lyrics-style-reset')?.addEventListener('click', () => { store.set('lyrics_align','left'); store.set('lyrics_color','#ffffff'); applyLyricsStyle(); toast('Tampilan lirik direset'); });
 applyLyricsStyle();
 // Restore user-edited lyrics per track before starting the network lookup.
 const originalLoadLyrics = loadLyrics;
