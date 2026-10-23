@@ -1831,3 +1831,13 @@ body.lyrics-focus #nowplaying #lyrics-source { display:none !important; }
   #nowplaying #np-player .np-controls .play-big { width: 58px; height: 58px; }
   #nowplaying #np-player #np-lyric-preview { min-height: 70px; max-height: 90px; padding-top: 11px; padding-bottom: 11px; font-size: 19px; }
 }
+
+/* v16: keep the Home editorial banner and keep all Now Playing tabs visible in default fullscreen lyrics. */
+body.lyrics-focus #nowplaying .np-tabs { display:flex !important; position:relative; z-index:5; flex-shrink:0; margin:8px auto 12px; }
+body.lyrics-focus #nowplaying .np-tab { display:inline-flex !important; }
+body.lyrics-focus #nowplaying .np-body { min-height:0; }
+body.lyrics-focus #nowplaying .lyrics-focus-btn { display:none !important; }
+body.lyrics-focus #nowplaying .lyrics-toolbar { padding-top:8px; }
+@media (max-width:760px) {
+  body.lyrics-focus #nowplaying .np-tabs { justify-content:flex-start; overflow-x:auto; max-width:100%; }
+}

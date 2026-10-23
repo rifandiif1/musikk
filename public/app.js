@@ -1606,7 +1606,25 @@ async function viewHome(view) {
   const pls = Library.playlists.filter((p) => p.tracks && p.tracks.length);
   const saved = Library.saved.slice(0, 12);
   const dateLine = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
-  let html = `<div class="hello-row"><div><div class="greeting">${esc(dateLine)}</div><h1 class="page-title">${greet}</h1></div></div>`;
+  const heroTrack = hist[0] || favs[0] || null;
+  const heroArt = heroTrack && heroTrack.thumbnail
+    ? `<img src="${esc(safeCover(heroTrack.thumbnail))}" alt="" loading="lazy">`
+    : `<div class="home-hero-placeholder">${icon('i-note')}</div>`;
+  let html = `
+    <section class="home-hero" aria-labelledby="home-hero-title">
+      <div class="home-hero-copy">
+        <div class="home-eyebrow"><span class="home-live-dot"></span> RICH MUSIC <span class="home-eyebrow-sep">/</span> YOUR SOUNDTRACK</div>
+        <div class="greeting">${esc(dateLine)}</div>
+        <h1 id="home-hero-title">${hist.length ? 'Pick up where <span>you left off.</span>' : 'Find your <span>next favorite.</span>'}</h1>
+        <p>${hist.length ? 'Your recent listens, favorite tracks, and new discoveries are right here.' : 'Explore music, discover new sounds, and build a library that feels like you.'}</p>
+        <div class="home-hero-actions">
+          <button type="button" class="home-cta home-cta-primary" data-home-go="#/search">${icon('i-search')} Explore music</button>
+          <button type="button" class="home-cta home-cta-secondary" data-home-go="#/charts">${icon('i-chart')} Explore charts</button>
+        </div>
+        <div class="home-hero-stats" aria-label="Your library summary"><div><strong>${hist.length}</strong><span>Recent</span></div><i></i><div><strong>${favs.length}</strong><span>Favorites</span></div><i></i><div><strong>${pls.length}</strong><span>Playlists</span></div></div>
+      </div>
+      <div class="home-hero-visual" aria-hidden="true"><div class="home-orbit home-orbit-one"></div><div class="home-orbit home-orbit-two"></div><div class="home-vinyl"><span></span></div><div class="home-hero-cover">${heroArt}<div class="home-cover-glint"></div></div><div class="home-visual-tag">${heroTrack ? `<span class="home-tag-dot"></span><span><b>BACK IN ROTATION</b><small>${esc(heroTrack.title || 'Recently played')}</small></span>` : `<span class="home-tag-dot"></span><span><b>YOUR NEXT DISCOVERY</b><small>Something good starts here</small></span>`}</div></div>
+    </section>`;
   if (hist.length) {
     html += `<div class="shelf-title">Recently played</div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div>`;
   }
@@ -1633,6 +1651,7 @@ async function viewHome(view) {
   html += d.sections.map(shelfHTML).join('');
   view.innerHTML = html;
   bindItems(view);
+  $$('[data-home-go]', view).forEach((el) => el.addEventListener('click', () => go(el.dataset.homeGo)));
   $$('[data-pl]', view).forEach((el) => el.addEventListener('click', () => go(`#/localpl/${el.dataset.pl}`)));
   loadMixForYou();
 }
@@ -2768,8 +2787,8 @@ document.addEventListener('keydown', (e) => {
   else if (e.code === 'ArrowLeft' && e.shiftKey) { e.preventDefault(); prevTrack(); }
   else if (e.code === 'ArrowRight' && Player.yt && Player.ready && !e.shiftKey) { e.preventDefault(); Player.yt.seekTo(Math.min((Player.yt.getDuration() || 0), (Player.yt.getCurrentTime() || 0) + 5), true); }
   else if (e.code === 'ArrowLeft' && Player.yt && Player.ready && !e.shiftKey) { e.preventDefault(); Player.yt.seekTo(Math.max(0, (Player.yt.getCurrentTime() || 0) - 5), true); }
-  else if (e.code === 'Escape') { if (document.body.classList.contains('lyrics-focus')) setLyricsFocus(false); else minimizeNowPlaying(); }
-  else if (e.code === 'KeyL') { const wasHidden = $('#nowplaying').classList.contains('hidden'); if (wasHidden) { openNowPlaying(); switchNPTab('lyrics'); } else if (document.body.classList.contains('lyrics-focus')) { setLyricsFocus(false); } else { switchNPTab('lyrics'); } }
+  else if (e.code === 'Escape') { minimizeNowPlaying(); }
+  else if (e.code === 'KeyL') { const wasHidden = $('#nowplaying').classList.contains('hidden'); if (wasHidden) { openNowPlaying(); switchNPTab('lyrics'); } else { switchNPTab('lyrics'); } }
   else if (e.code === 'KeyE') { if ($('#nowplaying').classList.contains('hidden')) { openNowPlaying(); switchNPTab('lyrics'); } openLyricsStudio('editor'); }
   else if (e.code === 'KeyP') { e.preventDefault(); toggleFloatWidget(); }
   else if (e.code === 'KeyM' && Player.yt && Player.ready) {
@@ -3283,9 +3302,7 @@ function setLyricsFocus(enabled) {
   document.body.classList.toggle('lyrics-focus', !!enabled);
   if (lyricsFocusButton) {
     lyricsFocusButton.setAttribute('aria-pressed', String(!!enabled));
-    lyricsFocusButton.title = enabled ? 'Exit full-screen lyrics (Esc)' : 'Full-screen lyrics';
-    const span = lyricsFocusButton.querySelector('span');
-    if (span) span.textContent = enabled ? 'Exit full screen' : 'Full screen';
+    lyricsFocusButton.title = 'Lirik fullscreen aktif secara default';
   }
   if (enabled) {
     $('#nowplaying').classList.remove('hidden');
@@ -3295,7 +3312,7 @@ function setLyricsFocus(enabled) {
     setTimeout(() => { const active = $('#lyrics-container .lyric-line.active'); if (active) scrollLyricWithinContainer(active); }, 0);
   }
 }
-lyricsFocusButton?.addEventListener('click', () => setLyricsFocus(!document.body.classList.contains('lyrics-focus')));
+lyricsFocusButton?.addEventListener('click', () => setLyricsFocus(true));
 /* ================= lyrics studio: providers, manual import, editor and styling ================= */
 const lyricsToolsPanel = $('#lyrics-tools-panel');
 const lyricsStylePanel = $('#lyrics-style-panel');
@@ -3475,7 +3492,7 @@ function openKeyboardHelp() {
     <div><kbd>L</kbd><span>Buka lirik fullscreen</span></div>
     <div><kbd>E</kbd><span>Buka Lyrics Studio (editor terpisah)</span></div>
     <div><kbd>P</kbd><span>Buka / tutup floating player</span></div>
-    <div><kbd>Esc</kbd><span>Keluar fullscreen / tutup pemutar</span></div>
+    <div><kbd>Esc</kbd><span>Minimalkan pemutar dan kembali ke Home</span></div>
     <div><kbd>?</kbd><span>Tampilkan bantuan ini</span></div>
   </div><div class="pl-form-actions"><button type="button" class="pill-btn primary" id="shortcut-close">Tutup</button></div>`;
   modal.classList.remove('hidden');
