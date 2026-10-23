@@ -213,15 +213,36 @@ try {
           <div class="lyrics-toolbar" aria-label="Lyrics controls">
             <div class="lyrics-toolbar-label"><span id="lyrics-track-title">LYRICS</span> <span id="lyrics-translation-status" class="lyrics-translation-status">Terjemahan Indonesia</span></div>
             <div class="lyrics-toolbar-actions">
-              <button type="button" id="lyrics-manual-toggle" class="lyrics-tool" title="Pencarian dan editor lirik" aria-expanded="false">Pencarian &amp; Editor</button>
-              <button type="button" id="lyrics-style-toggle" class="lyrics-tool" title="Atur tampilan lirik" aria-expanded="false">Aa</button>
+              <button type="button" id="lyrics-manual-toggle" class="lyrics-tool" title="Buka Lyrics Studio" aria-haspopup="dialog" aria-expanded="false">Lyrics Studio</button>
+              <button type="button" id="lyrics-style-toggle" class="lyrics-tool" title="Atur tampilan lirik di Lyrics Studio" aria-haspopup="dialog" aria-expanded="false">Aa</button>
               <button type="button" id="lyrics-translate" class="lyrics-tool" title="Terjemahkan lirik ke Bahasa Indonesia" aria-label="Terjemahkan lirik ke Bahasa Indonesia">ID ↻</button>
               <button type="button" id="lyrics-smaller" class="lyrics-tool" title="Smaller lyrics" aria-label="Smaller lyrics">A−</button>
               <button type="button" id="lyrics-larger" class="lyrics-tool" title="Larger lyrics" aria-label="Larger lyrics">A+</button>
               <button type="button" id="lyrics-focus" class="lyrics-tool lyrics-focus-btn" title="Full-screen lyrics" aria-label="Full-screen lyrics"><svg class="ic"><use href="#i-expand"/></svg><span>Full screen</span></button>
             </div>
           </div>
-          <div id="lyrics-tools-panel" class="lyrics-tools-panel" hidden>
+          
+          
+          <div id="lyrics-container"><div class="lyrics-empty">No lyrics yet</div></div>
+          <div id="lyrics-source"></div>
+        </section>
+        <section id="np-queue" class="np-pane"><div id="queue-list"></div></section>
+        <section id="np-related" class="np-pane"><div id="related-list" class="loading-note">Loading…</div></section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lyrics Studio: separate workspace, never embedded in fullscreen lyric reading -->
+  <div id="lyrics-studio" class="hidden" role="dialog" aria-modal="true" aria-labelledby="lyrics-studio-title">
+    <div class="lyrics-studio-backdrop" data-close-lyrics-studio></div>
+    <section class="lyrics-studio-window">
+      <header class="lyrics-studio-header">
+        <div><p class="lyrics-studio-eyebrow">RICH MUSIC / TOOLS</p><h2 id="lyrics-studio-title">Lyrics Studio</h2><p class="lyrics-studio-subtitle">Cari, impor, edit, sinkronkan, dan simpan lirik tanpa menutupi tampilan karaoke.</p></div>
+        <button type="button" id="lyrics-studio-close" class="icon-btn" aria-label="Tutup Lyrics Studio" title="Tutup Lyrics Studio">✕</button>
+      </header>
+      <div class="lyrics-studio-content">
+        <section class="lyrics-studio-section"><div class="lyrics-studio-section-heading"><h3>Pencarian &amp; Editor</h3><span>Perubahan diterapkan ke lagu aktif</span></div>
+<div id="lyrics-tools-panel" class="lyrics-tools-panel">
             <div class="lyrics-manual-grid">
               <label>Judul lagu<input id="lyrics-manual-title" type="text" placeholder="Judul lagu" autocomplete="off"></label>
               <label>Penyanyi<input id="lyrics-manual-artist" type="text" placeholder="Nama penyanyi" autocomplete="off"></label>
@@ -234,19 +255,16 @@ try {
 [00:16.20]Baris lirik kedua"></textarea>
             <input type="file" id="lyrics-import-file" accept=".lrc,.txt,text/plain" hidden />
             <div class="lyrics-editor-actions"><button type="button" id="lyrics-editor-load" class="pill-btn">Muat lirik saat ini</button><button type="button" id="lyrics-import" class="pill-btn">Impor .LRC/.TXT</button><button type="button" id="lyrics-shift-back" class="pill-btn" title="Geser timestamp mundur 0,5 detik">−0,5 dtk</button><button type="button" id="lyrics-shift-forward" class="pill-btn" title="Geser timestamp maju 0,5 detik">+0,5 dtk</button><button type="button" id="lyrics-editor-apply" class="pill-btn primary">Terapkan &amp; simpan</button><button type="button" id="lyrics-editor-export" class="pill-btn">Salin LRC</button><button type="button" id="lyrics-editor-download" class="pill-btn">Unduh .LRC</button></div>
-          </div>
-          <div id="lyrics-style-panel" class="lyrics-tools-panel lyrics-style-panel" hidden>
+          </div></section>
+        <section class="lyrics-studio-section"><div class="lyrics-studio-section-heading"><h3>Tampilan lirik</h3><span>Pengaturan berlaku pada layar Lyrics</span></div>
+<div id="lyrics-style-panel" class="lyrics-tools-panel lyrics-style-panel" hidden>
             <label>Perataan<select id="lyrics-align"><option value="left">Kiri</option><option value="center">Tengah</option><option value="right">Kanan</option></select></label>
             <label>Warna lirik<input id="lyrics-color" type="color" value="#ffffff" aria-label="Warna lirik"></label>
             <button type="button" id="lyrics-style-reset" class="pill-btn">Reset tampilan</button>
-          </div>
-          <div id="lyrics-container"><div class="lyrics-empty">No lyrics yet</div></div>
-          <div id="lyrics-source"></div>
-        </section>
-        <section id="np-queue" class="np-pane"><div id="queue-list"></div></section>
-        <section id="np-related" class="np-pane"><div id="related-list" class="loading-note">Loading…</div></section>
+          </div></section>
       </div>
-    </div>
+      <footer class="lyrics-studio-footer"><span>Tip: gunakan file .LRC untuk sinkronisasi karaoke.</span><button type="button" id="lyrics-studio-done" class="pill-btn primary">Selesai</button></footer>
+    </section>
   </div>
 
   <!-- Add-to-playlist modal -->

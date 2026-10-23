@@ -2665,16 +2665,7 @@ function switchNPTab(name) {
   if (name === 'related') loadRelated();
   if (name === 'lyrics') {
     lastLyricIdx = -2;
-    // Make the editor discoverable immediately; users shouldn't have to hunt for a hidden panel.
-    const tools = $('#lyrics-tools-panel');
-    const toggle = $('#lyrics-manual-toggle');
-    if (tools && toggle) {
-      tools.hidden = false;
-      toggle.setAttribute('aria-expanded', 'true');
-      toggle.textContent = 'Sembunyikan editor';
-      if (!$('#lyrics-manual-title').value || !$('#lyrics-manual-artist').value) fillLyricsManualFields();
-      if (!$('#lyrics-editor').value.trim()) $('#lyrics-editor').value = currentLyricsAsLRC();
-    }
+    // Lyrics view is dedicated to reading/karaoke. Editing lives in a separate Lyrics Studio dialog.
   }
   if (name === 'queue') renderQueue();
 }
@@ -2691,6 +2682,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.code === 'ArrowLeft' && Player.yt && Player.ready && !e.shiftKey) { e.preventDefault(); Player.yt.seekTo(Math.max(0, (Player.yt.getCurrentTime() || 0) - 5), true); }
   else if (e.code === 'Escape') { if (document.body.classList.contains('lyrics-focus')) setLyricsFocus(false); else closeNowPlaying(); }
   else if (e.code === 'KeyL') { const wasHidden = $('#nowplaying').classList.contains('hidden'); if (wasHidden) { openNowPlaying(); switchNPTab('lyrics'); setLyricsFocus(true); } else { switchNPTab('lyrics'); setLyricsFocus(!document.body.classList.contains('lyrics-focus')); } }
+  else if (e.code === 'KeyE') { if ($('#nowplaying').classList.contains('hidden')) { openNowPlaying(); switchNPTab('lyrics'); } openLyricsStudio('editor'); }
   else if (e.code === 'KeyP') { e.preventDefault(); toggleFloatWidget(); }
   else if (e.code === 'KeyM' && Player.yt && Player.ready) {
     const vol = Number(Player.yt.getVolume?.() ?? 100);
@@ -3244,21 +3236,37 @@ function fillLyricsManualFields() {
   if (!$('#lyrics-manual-title').value) $('#lyrics-manual-title').value = displayTitle(song.title) || song.title || '';
   if (!$('#lyrics-manual-artist').value) $('#lyrics-manual-artist').value = song.artist || song.subtitle || '';
 }
-lyricsManualToggle?.addEventListener('click', () => {
-  const opening = lyricsToolsPanel.hidden;
-  lyricsToolsPanel.hidden = !opening;
-  lyricsManualToggle.setAttribute('aria-expanded', String(opening));
-  lyricsManualToggle.textContent = opening ? 'Sembunyikan editor' : 'Pencarian & Editor';
-  if (opening) {
-    fillLyricsManualFields();
-    if (!$('#lyrics-editor').value.trim()) $('#lyrics-editor').value = currentLyricsAsLRC();
+const lyricsStudio = $('#lyrics-studio');
+function openLyricsStudio(section = 'editor') {
+  if (!lyricsStudio) return;
+  lyricsStudio.classList.remove('hidden');
+  document.body.classList.add('lyrics-studio-open');
+  lyricsManualToggle?.setAttribute('aria-expanded', String(section === 'editor'));
+  lyricsStyleToggle?.setAttribute('aria-expanded', String(section === 'style'));
+  lyricsStylePanel.hidden = section !== 'style';
+  fillLyricsManualFields();
+  if (!$('#lyrics-editor').value.trim()) $('#lyrics-editor').value = currentLyricsAsLRC();
+  if (section === 'style') {
+    lyricsStylePanel.hidden = false;
+    setTimeout(() => $('#lyrics-align')?.focus(), 40);
+  } else {
+    lyricsToolsPanel.hidden = false;
+    setTimeout(() => $('#lyrics-manual-title')?.focus(), 40);
   }
-});
-lyricsStyleToggle?.addEventListener('click', () => {
-  const opening = lyricsStylePanel.hidden;
-  lyricsStylePanel.hidden = !opening;
-  lyricsStyleToggle.setAttribute('aria-expanded', String(opening));
-});
+}
+function closeLyricsStudio() {
+  if (!lyricsStudio) return;
+  lyricsStudio.classList.add('hidden');
+  document.body.classList.remove('lyrics-studio-open');
+  lyricsManualToggle?.setAttribute('aria-expanded', 'false');
+  lyricsStyleToggle?.setAttribute('aria-expanded', 'false');
+}
+lyricsManualToggle?.addEventListener('click', () => openLyricsStudio('editor'));
+lyricsStyleToggle?.addEventListener('click', () => openLyricsStudio('style'));
+$('#lyrics-studio-close')?.addEventListener('click', closeLyricsStudio);
+$('#lyrics-studio-done')?.addEventListener('click', closeLyricsStudio);
+lyricsStudio?.addEventListener('click', (e) => { if (e.target.closest('[data-close-lyrics-studio]')) closeLyricsStudio(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && lyricsStudio && !lyricsStudio.classList.contains('hidden')) { e.stopImmediatePropagation(); closeLyricsStudio(); } }, true);
 $('#lyrics-manual-search')?.addEventListener('click', async () => {
   const title = $('#lyrics-manual-title').value.trim();
   const artist = $('#lyrics-manual-artist').value.trim();
@@ -3368,6 +3376,7 @@ function openKeyboardHelp() {
     <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd><span>Lagu sebelumnya / berikutnya</span></div>
     <div><kbd>M</kbd><span>Mute / pulihkan volume</span></div>
     <div><kbd>L</kbd><span>Buka lirik fullscreen</span></div>
+    <div><kbd>E</kbd><span>Buka Lyrics Studio (editor terpisah)</span></div>
     <div><kbd>P</kbd><span>Buka / tutup floating player</span></div>
     <div><kbd>Esc</kbd><span>Keluar fullscreen / tutup pemutar</span></div>
     <div><kbd>?</kbd><span>Tampilkan bantuan ini</span></div>
