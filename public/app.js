@@ -1626,7 +1626,7 @@ async function viewHome(view) {
       <div class="home-hero-visual" aria-hidden="true"><div class="home-orbit home-orbit-one"></div><div class="home-orbit home-orbit-two"></div><div class="home-vinyl"><span></span></div><div class="home-hero-cover">${heroArt}<div class="home-cover-glint"></div></div><div class="home-visual-tag">${heroTrack ? `<span class="home-tag-dot"></span><span><b>BACK IN ROTATION</b><small>${esc(heroTrack.title || 'Recently played')}</small></span>` : `<span class="home-tag-dot"></span><span><b>YOUR NEXT DISCOVERY</b><small>Something good starts here</small></span>`}</div></div>
     </section>`;
   if (hist.length) {
-    html += `<div class="shelf-title">Recently played</div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div>`;
+    html += `<div class="shelf home-shelf"><div class="shelf-title"><span>Recently played</span><span class="home-section-note">Pick up the vibe</span></div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div></div>`;
   }
   html += `<div id="mix-slot"></div>`;
   if (hist.length > 8) {
