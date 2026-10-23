@@ -1521,9 +1521,36 @@ async function viewHome(view) {
   const pls = Library.playlists.filter((p) => p.tracks && p.tracks.length);
   const saved = Library.saved.slice(0, 12);
   const dateLine = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
-  let html = `<div class="hello-row"><div><div class="greeting">${esc(dateLine)}</div><h1 class="page-title">${greet}</h1></div></div>`;
+  const heroTrack = hist[0] || favs[0] || null;
+  const heroArt = heroTrack && heroTrack.thumbnail
+    ? `<img src="${esc(safeCover(heroTrack.thumbnail))}" alt="" loading="lazy">`
+    : `<div class="home-hero-placeholder">${icon('i-note')}</div>`;
+  let html = `
+    <section class="home-hero" aria-labelledby="home-hero-title">
+      <div class="home-hero-copy">
+        <div class="home-eyebrow"><span class="home-live-dot"></span> RICH MUSIC <span class="home-eyebrow-sep">/</span> YOUR SOUNDTRACK</div>
+        <div class="greeting">${esc(dateLine)}</div>
+        <h1 id="home-hero-title">${hist.length ? 'Pick up where <span>you left off.</span>' : 'Find your <span>next favorite.</span>'}</h1>
+        <p>${hist.length ? 'Your recent listens, favorite tracks, and new discoveries are right here.' : 'Explore music, discover new sounds, and build a library that feels like you.'}</p>
+        <div class="home-hero-actions">
+          <button type="button" class="home-cta home-cta-primary" data-home-go="#/search">${icon('i-search')} Explore music</button>
+          <button type="button" class="home-cta home-cta-secondary" data-home-go="#/charts">${icon('i-chart')} Explore charts</button>
+        </div>
+        <div class="home-hero-stats" aria-label="Your library summary">
+          <div><strong>${hist.length}</strong><span>Recent</span></div>
+          <i></i><div><strong>${favs.length}</strong><span>Favorites</span></div>
+          <i></i><div><strong>${pls.length}</strong><span>Playlists</span></div>
+        </div>
+      </div>
+      <div class="home-hero-visual" aria-hidden="true">
+        <div class="home-orbit home-orbit-one"></div><div class="home-orbit home-orbit-two"></div>
+        <div class="home-vinyl"><span></span></div>
+        <div class="home-hero-cover">${heroArt}<div class="home-cover-glint"></div></div>
+        <div class="home-visual-tag">${heroTrack ? `<span class="home-tag-dot"></span><span><b>BACK IN ROTATION</b><small>${esc(heroTrack.title || 'Recently played')}</small></span>` : `<span class="home-tag-dot"></span><span><b>YOUR NEXT DISCOVERY</b><small>Something good starts here</small></span>`}</div>
+      </div>
+    </section>`;
   if (hist.length) {
-    html += `<div class="shelf-title">Recently played</div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div>`;
+    html += `<div class="shelf home-shelf"><div class="shelf-title"><span>Recently played</span><span class="home-section-note">Pick up the vibe</span></div><div class="quick-grid">${hist.slice(0, 8).map((s) => quickCardHTML({ ...s, type: 'song', subtitle: s.artist })).join('')}</div></div>`;
   }
   html += `<div id="mix-slot"></div>`;
   if (hist.length > 8) {
@@ -1548,6 +1575,7 @@ async function viewHome(view) {
   html += d.sections.map(shelfHTML).join('');
   view.innerHTML = html;
   bindItems(view);
+  $$('[data-home-go]', view).forEach((el) => el.addEventListener('click', () => go(el.dataset.homeGo)));
   $$('[data-pl]', view).forEach((el) => el.addEventListener('click', () => go(`#/localpl/${el.dataset.pl}`)));
   loadMixForYou();
 }
