@@ -110,6 +110,7 @@ try {
       </button>
       <div class="tb-actions">
         <button id="sidebar-toggle" class="tb-btn" title="Hide sidebar" aria-label="Hide sidebar" aria-pressed="false"><svg class="ic"><use href="#i-library"/></svg></button>
+        <button id="keyboard-help" class="tb-btn" title="Pintasan keyboard (?)" aria-label="Pintasan keyboard">?</button>
         <button id="theme-toggle" class="tb-btn" title="Dark theme is always on" aria-label="Dark theme is always on">
           <svg class="ic" id="theme-ic"><use href="#i-sun"/></svg>
         </button>
@@ -231,7 +232,8 @@ try {
             <label class="lyrics-editor-label" for="lyrics-editor">Editor lirik (LRC dengan timestamp atau teks biasa)</label>
             <textarea id="lyrics-editor" rows="8" spellcheck="false" placeholder="[00:12.00]Baris lirik pertama
 [00:16.20]Baris lirik kedua"></textarea>
-            <div class="lyrics-editor-actions"><button type="button" id="lyrics-editor-load" class="pill-btn">Muat lirik saat ini</button><button type="button" id="lyrics-editor-apply" class="pill-btn primary">Terapkan & simpan</button><button type="button" id="lyrics-editor-export" class="pill-btn">Salin LRC</button></div>
+            <input type="file" id="lyrics-import-file" accept=".lrc,.txt,text/plain" hidden />
+            <div class="lyrics-editor-actions"><button type="button" id="lyrics-editor-load" class="pill-btn">Muat lirik saat ini</button><button type="button" id="lyrics-import" class="pill-btn">Impor .LRC/.TXT</button><button type="button" id="lyrics-shift-back" class="pill-btn" title="Geser timestamp mundur 0,5 detik">−0,5 dtk</button><button type="button" id="lyrics-shift-forward" class="pill-btn" title="Geser timestamp maju 0,5 detik">+0,5 dtk</button><button type="button" id="lyrics-editor-apply" class="pill-btn primary">Terapkan &amp; simpan</button><button type="button" id="lyrics-editor-export" class="pill-btn">Salin LRC</button><button type="button" id="lyrics-editor-download" class="pill-btn">Unduh .LRC</button></div>
           </div>
           <div id="lyrics-style-panel" class="lyrics-tools-panel lyrics-style-panel" hidden>
             <label>Perataan<select id="lyrics-align"><option value="left">Kiri</option><option value="center">Tengah</option><option value="right">Kanan</option></select></label>

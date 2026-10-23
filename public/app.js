@@ -340,16 +340,19 @@ function queueSong(song, playNext = false) {
     Player.queue.splice(i, 0, s);
     toast('Added to your queue');
   }
+  persistQueue();
   renderQueue();
 }
 function removeQueued(i) {
   if (i === Player.index || i < 0 || i >= Player.queue.length) return;
   if (i < Player.index) Player.index--;
   Player.queue.splice(i, 1);
+  persistQueue();
   renderQueue();
 }
 function clearUserQueue() {
   Player.queue = Player.queue.filter((q, i) => i <= Player.index || !q._user);
+  persistQueue();
   renderQueue();
   toast('Queue cleared');
 }
@@ -2558,6 +2561,7 @@ $('#mini-queue-m').addEventListener('click', openQueue);
 $('#mini-shuffle').addEventListener('click', (e) => {
   e.stopPropagation();
   Player.shuffle = !Player.shuffle;
+  persistQueue();
   $('#mini-shuffle').classList.toggle('on', Player.shuffle);
   $('#np-shuffle').classList.toggle('on', Player.shuffle);
   toast(Player.shuffle ? 'Shuffle on' : 'Shuffle off');
@@ -2677,13 +2681,23 @@ function switchNPTab(name) {
 $$('.np-tab').forEach((t) => t.addEventListener('click', () => switchNPTab(t.dataset.nptab)));
 
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const target = e.target;
+  if (target && (target.isContentEditable || /INPUT|TEXTAREA|SELECT|BUTTON/.test(target.tagName || ''))) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-  if (e.code === 'ArrowRight' && e.shiftKey) nextTrack(false);
-  if (e.code === 'ArrowLeft' && e.shiftKey) prevTrack();
-  if (e.code === 'Escape') closeNowPlaying();
-  if (e.code === 'KeyL') toggleTheme();
-  if (e.code === 'KeyP') { e.preventDefault(); toggleFloatWidget(); }
+  else if (e.code === 'ArrowRight' && e.shiftKey) { e.preventDefault(); nextTrack(false); }
+  else if (e.code === 'ArrowLeft' && e.shiftKey) { e.preventDefault(); prevTrack(); }
+  else if (e.code === 'ArrowRight' && Player.yt && Player.ready && !e.shiftKey) { e.preventDefault(); Player.yt.seekTo(Math.min((Player.yt.getDuration() || 0), (Player.yt.getCurrentTime() || 0) + 5), true); }
+  else if (e.code === 'ArrowLeft' && Player.yt && Player.ready && !e.shiftKey) { e.preventDefault(); Player.yt.seekTo(Math.max(0, (Player.yt.getCurrentTime() || 0) - 5), true); }
+  else if (e.code === 'Escape') { if (document.body.classList.contains('lyrics-focus')) setLyricsFocus(false); else closeNowPlaying(); }
+  else if (e.code === 'KeyL') { const wasHidden = $('#nowplaying').classList.contains('hidden'); if (wasHidden) { openNowPlaying(); switchNPTab('lyrics'); setLyricsFocus(true); } else { switchNPTab('lyrics'); setLyricsFocus(!document.body.classList.contains('lyrics-focus')); } }
+  else if (e.code === 'KeyP') { e.preventDefault(); toggleFloatWidget(); }
+  else if (e.code === 'KeyM' && Player.yt && Player.ready) {
+    const vol = Number(Player.yt.getVolume?.() ?? 100);
+    if (vol > 0) { store.set('last_nonzero_vol', vol); Player.yt.setVolume(0); $('#mini-volume').value = 0; $('#np-volume').value = 0; }
+    else { const restore = Number(store.get('last_nonzero_vol', 70)) || 70; Player.yt.setVolume(restore); $('#mini-volume').value = restore; $('#np-volume').value = restore; }
+  }
+  else if (e.key === '?') openKeyboardHelp();
 });
 
 /* topbar back / forward (Spotify chrome) */
@@ -3193,13 +3207,6 @@ function setLyricsFocus(enabled) {
   }
 }
 lyricsFocusButton?.addEventListener('click', () => setLyricsFocus(!document.body.classList.contains('lyrics-focus')));
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && document.body.classList.contains('lyrics-focus')) setLyricsFocus(false);
-  if ((e.key === 'l' || e.key === 'L') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    if (!$('#nowplaying').classList.contains('hidden')) setLyricsFocus(!document.body.classList.contains('lyrics-focus'));
-  }
-});
-
 /* ================= lyrics studio: providers, manual import, editor and styling ================= */
 const lyricsToolsPanel = $('#lyrics-tools-panel');
 const lyricsStylePanel = $('#lyrics-style-panel');
@@ -3305,6 +3312,71 @@ $('#lyrics-editor-export')?.addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(value); toast('Lirik disalin'); }
   catch { $('#lyrics-editor').focus(); $('#lyrics-editor').select(); toast('Pilih teks lalu salin secara manual'); }
 });
+// Import/export and timestamp alignment tools for Lyrics Studio.
+$('#lyrics-import')?.addEventListener('click', () => $('#lyrics-import-file')?.click());
+$('#lyrics-import-file')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    $('#lyrics-editor').value = text;
+    const title = $('#lyrics-manual-title');
+    if (title && !title.value) title.value = file.name.replace(/\.(lrc|txt)$/i, '').replace(/[_-]+/g, ' ');
+    const hint = $('#lyrics-manual-hint');
+    if (hint) hint.textContent = `File ${file.name} dimuat ke editor. Periksa lalu pilih Terapkan & simpan.`;
+    toast('File lirik dimuat ke editor');
+  } catch { toast('File tidak dapat dibaca'); }
+  e.target.value = '';
+});
+function shiftLrcTimestamps(delta) {
+  const area = $('#lyrics-editor');
+  const raw = String(area?.value || currentLyricsAsLRC());
+  if (!raw.trim()) { toast('Tidak ada lirik untuk diselaraskan'); return; }
+  const shifted = raw.replace(/([<\[])(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?([>\]])/g, (full, open, mm, ss, ff, close) => {
+    const fraction = ff ? Number(`0.${ff}`) : 0;
+    const total = Math.max(0, Number(mm) * 60 + Number(ss) + fraction + delta);
+    const minutes = Math.floor(total / 60);
+    const seconds = total - minutes * 60;
+    return `${open}${String(minutes).padStart(2, '0')}:${seconds.toFixed(2).padStart(5, '0')}${close}`;
+  });
+  if (area) area.value = shifted;
+  toast(`Timestamp digeser ${delta > 0 ? 'maju' : 'mundur'} 0,5 detik`);
+}
+$('#lyrics-shift-back')?.addEventListener('click', () => shiftLrcTimestamps(-0.5));
+$('#lyrics-shift-forward')?.addEventListener('click', () => shiftLrcTimestamps(0.5));
+$('#lyrics-editor-download')?.addEventListener('click', () => {
+  const value = String($('#lyrics-editor')?.value || currentLyricsAsLRC()).trim();
+  if (!value) { toast('Tidak ada lirik untuk diunduh'); return; }
+  const song = focusedSong() || {};
+  const base = songTitleArtist(song.title || 'lyrics', song.artist || '').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 100) || 'lyrics';
+  const blob = new Blob([value + '\n'], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `${base}.lrc`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('File LRC diunduh');
+});
+
+function openKeyboardHelp() {
+  const modal = $('#modal');
+  const body = $('#modal-body');
+  const actions = $('.modal-actions');
+  $('#modal-title').textContent = 'Pintasan keyboard';
+  if (actions) actions.classList.add('hidden');
+  body.innerHTML = `<div class="shortcut-list">
+    <div><kbd>Space</kbd><span>Putar / jeda</span></div>
+    <div><kbd>←</kbd> / <kbd>→</kbd><span>Mundur / maju 5 detik</span></div>
+    <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd><span>Lagu sebelumnya / berikutnya</span></div>
+    <div><kbd>M</kbd><span>Mute / pulihkan volume</span></div>
+    <div><kbd>L</kbd><span>Buka lirik fullscreen</span></div>
+    <div><kbd>P</kbd><span>Buka / tutup floating player</span></div>
+    <div><kbd>Esc</kbd><span>Keluar fullscreen / tutup pemutar</span></div>
+    <div><kbd>?</kbd><span>Tampilkan bantuan ini</span></div>
+  </div><div class="pl-form-actions"><button type="button" class="pill-btn primary" id="shortcut-close">Tutup</button></div>`;
+  modal.classList.remove('hidden');
+  $('#shortcut-close')?.addEventListener('click', closeModal);
+}
+$('#keyboard-help')?.addEventListener('click', openKeyboardHelp);
+
 function applyLyricsStyle() {
   const align = store.get('lyrics_align', 'center');
   const color = store.get('lyrics_color', '#ffffff');
