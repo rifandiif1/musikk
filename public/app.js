@@ -3221,6 +3221,8 @@ function setLyricsFocus(enabled) {
     const span = lyricsFocusButton.querySelector('span');
     if (span) span.textContent = enabled ? 'Exit full screen' : 'Full screen';
   }
+  const caption = $('#nowplaying .np-caption');
+  if (caption) caption.textContent = enabled ? 'LYRICS' : 'NOW PLAYING';
   if (enabled) {
     $('#nowplaying').classList.remove('hidden');
     document.body.classList.add('np-open');
