@@ -161,7 +161,7 @@ try {
     <div class="np-inner">
       <div class="np-handle" aria-hidden="true"></div>
       <div class="np-topbar">
-        <button id="np-close" class="icon-btn" title="Minimize"><svg class="ic"><use href="#i-chev-down"/></svg></button>
+        <button id="np-close" class="icon-btn" title="Tutup pemutar layar penuh" aria-label="Tutup pemutar"><svg class="ic"><use href="#i-chev-down"/></svg></button>
         <span class="np-caption">Now Playing</span>
         <button id="np-sleep" class="icon-btn" title="Sleep timer"><svg class="ic"><use href="#i-clock"/></svg></button>
       </div>
@@ -212,11 +212,31 @@ try {
           <div class="lyrics-toolbar" aria-label="Lyrics controls">
             <div class="lyrics-toolbar-label"><span id="lyrics-track-title">LYRICS</span> <span id="lyrics-translation-status" class="lyrics-translation-status">Terjemahan Indonesia</span></div>
             <div class="lyrics-toolbar-actions">
+              <button type="button" id="lyrics-manual-toggle" class="lyrics-tool" title="Pencarian dan editor lirik" aria-expanded="false">Pencarian &amp; Editor</button>
+              <button type="button" id="lyrics-style-toggle" class="lyrics-tool" title="Atur tampilan lirik" aria-expanded="false">Aa</button>
               <button type="button" id="lyrics-translate" class="lyrics-tool" title="Terjemahkan lirik ke Bahasa Indonesia" aria-label="Terjemahkan lirik ke Bahasa Indonesia">ID ↻</button>
               <button type="button" id="lyrics-smaller" class="lyrics-tool" title="Smaller lyrics" aria-label="Smaller lyrics">A−</button>
               <button type="button" id="lyrics-larger" class="lyrics-tool" title="Larger lyrics" aria-label="Larger lyrics">A+</button>
               <button type="button" id="lyrics-focus" class="lyrics-tool lyrics-focus-btn" title="Full-screen lyrics" aria-label="Full-screen lyrics"><svg class="ic"><use href="#i-expand"/></svg><span>Full screen</span></button>
             </div>
+          </div>
+          <div id="lyrics-tools-panel" class="lyrics-tools-panel" hidden>
+            <div class="lyrics-manual-grid">
+              <label>Judul lagu<input id="lyrics-manual-title" type="text" placeholder="Judul lagu" autocomplete="off"></label>
+              <label>Penyanyi<input id="lyrics-manual-artist" type="text" placeholder="Nama penyanyi" autocomplete="off"></label>
+              <label>Sumber pencarian<select id="lyrics-manual-source"><option value="builtin">Sumber bawaan aplikasi</option><option value="lyricsify">Lyricsify (LRC)</option><option value="google">Google · Lyricsify</option><option value="lrclib">LRCLIB</option></select></label>
+              <button type="button" id="lyrics-manual-search" class="pill-btn">Cari lirik</button>
+            </div>
+            <p id="lyrics-manual-hint" class="lyrics-editor-hint">Pilih sumber, cari lirik, lalu tempelkan LRC/teks di editor jika hasilnya terbuka di tab baru.</p>
+            <label class="lyrics-editor-label" for="lyrics-editor">Editor lirik (LRC dengan timestamp atau teks biasa)</label>
+            <textarea id="lyrics-editor" rows="8" spellcheck="false" placeholder="[00:12.00]Baris lirik pertama
+[00:16.20]Baris lirik kedua"></textarea>
+            <div class="lyrics-editor-actions"><button type="button" id="lyrics-editor-load" class="pill-btn">Muat lirik saat ini</button><button type="button" id="lyrics-editor-apply" class="pill-btn primary">Terapkan & simpan</button><button type="button" id="lyrics-editor-export" class="pill-btn">Salin LRC</button></div>
+          </div>
+          <div id="lyrics-style-panel" class="lyrics-tools-panel lyrics-style-panel" hidden>
+            <label>Perataan<select id="lyrics-align"><option value="left">Kiri</option><option value="center">Tengah</option><option value="right">Kanan</option></select></label>
+            <label>Warna lirik<input id="lyrics-color" type="color" value="#ffffff" aria-label="Warna lirik"></label>
+            <button type="button" id="lyrics-style-reset" class="pill-btn">Reset tampilan</button>
           </div>
           <div id="lyrics-container"><div class="lyrics-empty">No lyrics yet</div></div>
           <div id="lyrics-source"></div>

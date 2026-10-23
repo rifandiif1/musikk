@@ -57,8 +57,12 @@ function toggleTheme() {
   toast('Dark theme enabled');
 }
 function openNowPlaying() {
-  $('#nowplaying').classList.remove('hidden');
+  const panel = $('#nowplaying');
+  panel.classList.remove('hidden');
   document.body.classList.add('np-open');
+  // The now-playing workspace is intentionally a full-window surface, not a narrow side drawer.
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('role', 'dialog');
 }
 function closeNowPlaying() {
   document.body.classList.remove('lyrics-focus');
@@ -701,9 +705,28 @@ function parseLRC(lrc) {
     const m = raw.match(/\[(\d+):(\d+)(?:[.:](\d+))?\](.*)/);
     if (!m) continue;
     const frac = m[3] ? Number(`0.${m[3]}`) : 0;
-    lines.push({ t: parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + frac, text: (m[4] || '').trim() });
+    const text = (m[4] || '').trim();
+    const words = parseEnhancedWords(text);
+    lines.push({ t: parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + frac, text: text.replace(/<\d{1,2}:\d{2}(?:[.:]\d+)?\s*>/g, '').trim(), words });
   }
   return lines.sort((a, b) => a.t - b.t);
+}
+function parseEnhancedWords(text) {
+  const re = /<((?:\d{1,2}):\d{2}(?:[.:]\d+)?)>/g;
+  const matches = [...String(text || '').matchAll(re)];
+  if (!matches.length) return [];
+  const out = [];
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i], start = m.index + m[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : String(text).length;
+    const stamp = m[1].replace('.', ':').split(':');
+    const minute = Number(stamp[0] || 0), second = Number(stamp[1] || 0);
+    const frac = stamp[2] ? Number(`0.${stamp[2]}`) : 0;
+    const t = minute * 60 + second + frac;
+    const value = String(text).slice(start, end).replace(/<[^>]+>/g, '').trim();
+    if (value) out.push({ t, text: value });
+  }
+  return out;
 }
 function renderLyrics() {
   const c = $('#lyrics-container');
@@ -713,7 +736,10 @@ function renderLyrics() {
   const lyricSong = focusedSong();
   if (lyricTitle) lyricTitle.textContent = lyricSong ? songTitleArtist(lyricSong.title, lyricSong.artist) : 'LYRICS';
   if (L.lines.length) {
-    c.innerHTML = L.lines.map((l, i) => `<div class="lyric-line-wrap"><div class="lyric-line" data-i="${i}" data-t="${l.t}">${esc(l.text) || '♪'}</div>${L.translations && L.translations[i] ? `<div class="lyric-translation">${esc(L.translations[i])}</div>` : ''}</div>`).join('');
+    c.innerHTML = L.lines.map((l, i) => {
+      const lyricText = l.words && l.words.length ? l.words.map((w, wi) => `<span class="lyric-word" data-wi="${wi}" data-wt="${w.t}">${esc(w.text)} </span>`).join('') : esc(l.text);
+      return `<div class="lyric-line-wrap"><div class="lyric-line" data-i="${i}" data-t="${l.t}">${lyricText || '♪'}</div>${L.translations && L.translations[i] ? `<div class="lyric-translation">${esc(L.translations[i])}</div>` : ''}</div>`;
+    }).join('');
     $$('.lyric-line', c).forEach((el) => el.addEventListener('click', () => {
       const t = parseFloat(el.dataset.t);
       if (Player.yt && Player.ready) { Player.yt.seekTo(t, true); Player.yt.playVideo(); }
@@ -790,12 +816,27 @@ function updateLyricHighlight(cur) {
   if (!L.lines.length) return;
   let idx = -1;
   for (let i = 0; i < L.lines.length; i++) { if (cur >= L.lines[i].t - 0.2) idx = i; else break; }
-  if (idx === lastLyricIdx) return;
-  lastLyricIdx = idx;
   const c = $('#lyrics-container');
+  if (idx === lastLyricIdx) {
+    const current = c.querySelector('.lyric-line.active');
+    if (current) {
+      const words = $$('.lyric-word', current);
+      let activeWord = -1;
+      words.forEach((word, wi) => { if (cur >= Number(word.dataset.wt || 0)) activeWord = wi; });
+      words.forEach((word, wi) => word.classList.toggle('word-active', wi === activeWord));
+    }
+    return;
+  }
+  lastLyricIdx = idx;
   $$('.lyric-line', c).forEach((el, i) => {
     el.classList.toggle('active', i === idx);
     el.classList.toggle('past', i < idx);
+    if (i === idx) {
+      const words = $$('.lyric-word', el);
+      let activeWord = -1;
+      words.forEach((word, wi) => { if (cur >= Number(word.dataset.wt || 0)) activeWord = wi; });
+      words.forEach((word, wi) => word.classList.toggle('word-active', wi === activeWord));
+    } else $$('.lyric-word', el).forEach((word) => word.classList.remove('word-active'));
   });
   const active = c.querySelector('.lyric-line.active');
   if (active && $('#np-lyrics').classList.contains('active')) active.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -2618,7 +2659,19 @@ function switchNPTab(name) {
   $$('.np-tab').forEach((t) => t.classList.toggle('active', t.dataset.nptab === name));
   $$('.np-pane').forEach((p) => p.classList.toggle('active', p.id === 'np-' + name));
   if (name === 'related') loadRelated();
-  if (name === 'lyrics') { lastLyricIdx = -2; }
+  if (name === 'lyrics') {
+    lastLyricIdx = -2;
+    // Make the editor discoverable immediately; users shouldn't have to hunt for a hidden panel.
+    const tools = $('#lyrics-tools-panel');
+    const toggle = $('#lyrics-manual-toggle');
+    if (tools && toggle) {
+      tools.hidden = false;
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.textContent = 'Sembunyikan editor';
+      if (!$('#lyrics-manual-title').value || !$('#lyrics-manual-artist').value) fillLyricsManualFields();
+      if (!$('#lyrics-editor').value.trim()) $('#lyrics-editor').value = currentLyricsAsLRC();
+    }
+  }
   if (name === 'queue') renderQueue();
 }
 $$('.np-tab').forEach((t) => t.addEventListener('click', () => switchNPTab(t.dataset.nptab)));
@@ -3146,6 +3199,140 @@ document.addEventListener('keydown', (e) => {
     if (!$('#nowplaying').classList.contains('hidden')) setLyricsFocus(!document.body.classList.contains('lyrics-focus'));
   }
 });
+
+/* ================= lyrics studio: providers, manual import, editor and styling ================= */
+const lyricsToolsPanel = $('#lyrics-tools-panel');
+const lyricsStylePanel = $('#lyrics-style-panel');
+const lyricsManualToggle = $('#lyrics-manual-toggle');
+const lyricsStyleToggle = $('#lyrics-style-toggle');
+function lyricSongKey() { return String(Player.current?.videoId || `${Player.current?.title || ''}::${Player.current?.artist || ''}`); }
+function currentLyricsAsLRC() {
+  const L = Player.lyrics || {};
+  if (L.synced) return String(L.synced);
+  if (L.lines?.length) return L.lines.map((line) => `[${String(Math.floor(line.t/60)).padStart(2,'0')}:${(line.t%60).toFixed(2).padStart(5,'0')}]${line.text || ''}`).join('\n');
+  return String(L.plain || '');
+}
+function setLyricsFromEditor(raw, source = 'Manual edit') {
+  const value = String(raw || '').trim();
+  if (!value) { toast('Editor lirik masih kosong'); return; }
+  const lines = parseLRC(value);
+  const hasTimedLines = lines.length > 0;
+  Player.lyrics = {
+    ...(Player.lyrics || {}), synced: hasTimedLines ? value : null,
+    plain: hasTimedLines ? null : value, lines: hasTimedLines ? lines : [],
+    source, translations: null, translatedPlain: null, translationState: 'idle'
+  };
+  try { localStorage.setItem(`richmusic_lyrics_${lyricSongKey()}`, JSON.stringify({ raw:value, source })); } catch {}
+  renderLyrics();
+  toast('Lirik diterapkan dan disimpan untuk lagu ini');
+}
+function openLyricsExternal(url, hint) {
+  const w = window.open(url, '_blank', 'noopener,noreferrer');
+  const status = $('#lyrics-manual-hint');
+  if (status) status.textContent = w ? hint : 'Tab baru diblokir browser. Izinkan pop-up atau salin URL pencarian dari tombol Cari lirik.';
+}
+function fillLyricsManualFields() {
+  const song = Player.current || Player.pending;
+  if (!song) return;
+  if (!$('#lyrics-manual-title').value) $('#lyrics-manual-title').value = displayTitle(song.title) || song.title || '';
+  if (!$('#lyrics-manual-artist').value) $('#lyrics-manual-artist').value = song.artist || song.subtitle || '';
+}
+lyricsManualToggle?.addEventListener('click', () => {
+  const opening = lyricsToolsPanel.hidden;
+  lyricsToolsPanel.hidden = !opening;
+  lyricsManualToggle.setAttribute('aria-expanded', String(opening));
+  lyricsManualToggle.textContent = opening ? 'Sembunyikan editor' : 'Pencarian & Editor';
+  if (opening) {
+    fillLyricsManualFields();
+    if (!$('#lyrics-editor').value.trim()) $('#lyrics-editor').value = currentLyricsAsLRC();
+  }
+});
+lyricsStyleToggle?.addEventListener('click', () => {
+  const opening = lyricsStylePanel.hidden;
+  lyricsStylePanel.hidden = !opening;
+  lyricsStyleToggle.setAttribute('aria-expanded', String(opening));
+});
+$('#lyrics-manual-search')?.addEventListener('click', async () => {
+  const title = $('#lyrics-manual-title').value.trim();
+  const artist = $('#lyrics-manual-artist').value.trim();
+  const source = $('#lyrics-manual-source').value;
+  if (!title) { toast('Masukkan judul lagu terlebih dahulu'); $('#lyrics-manual-title').focus(); return; }
+  const query = `${artist} ${title}`.trim();
+  const hint = $('#lyrics-manual-hint');
+  if (source === 'lyricsify') {
+    const apiUrl = `https://api.lyricsify.com/search?q=${encodeURIComponent(query)}`;
+    openLyricsExternal(apiUrl, 'Hasil Lyricsify dibuka di tab baru. Jika API tidak menampilkan halaman yang bisa dibaca, gunakan pencarian Google · Lyricsify lalu buka hasil LRC. Tempelkan isi LRC ke editor dan tekan Terapkan & simpan.');
+    return;
+  }
+  if (source === 'google') {
+    openLyricsExternal(`https://www.google.com/search?q=${encodeURIComponent(`site:lyricsify.com ${query} lyrics LRC`)}`, 'Pilih hasil dari lyricsify.com. Buka hasilnya, salin lirik/LRC yang tersedia, lalu tempelkan di editor.');
+    return;
+  }
+  if (source === 'lrclib') {
+    if (hint) hint.textContent = 'Mencari di LRCLIB…';
+    try {
+      const res = await fetch(`https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}`);
+      if (!res.ok) throw new Error('LRCLIB unavailable');
+      const results = await res.json();
+      const match = results.find(x => x.syncedLyrics || x.plainLyrics) || results[0];
+      if (!match) throw new Error('No lyrics');
+      setLyricsFromEditor(match.syncedLyrics || match.plainLyrics, 'LRCLIB');
+      $('#lyrics-editor').value = match.syncedLyrics || match.plainLyrics || '';
+      if (hint) hint.textContent = `Hasil LRCLIB: ${match.trackName || title} — ${match.artistName || artist}. Periksa hasil sebelum disimpan.`;
+    } catch {
+      if (hint) hint.textContent = 'LRCLIB tidak dapat diakses saat ini. Coba sumber bawaan atau Lyricsify.';
+      toast('Pencarian LRCLIB gagal');
+    }
+    return;
+  }
+  if (hint) hint.textContent = 'Mencari melalui sumber bawaan aplikasi…';
+  try {
+    const duration = Player.yt?.getDuration ? Math.round(Player.yt.getDuration() || 0) : 0;
+    const d = await api(`/api/lyrics?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&duration=${duration}&browseId=${encodeURIComponent(Player.lyricsBrowseId || '')}`);
+    if (!d?.synced && !d?.plain) throw new Error('No lyrics');
+    Player.lyrics = { ...d, lines: d.synced ? parseLRC(d.synced) : [], translationState:'idle' };
+    renderLyrics(); $('#lyrics-editor').value = currentLyricsAsLRC();
+    if (hint) hint.textContent = `Lirik ditemukan${d.source ? ` dari ${d.source}` : ''}. Anda dapat mengeditnya di bawah.`;
+  } catch {
+    if (hint) hint.textContent = 'Tidak ditemukan dari sumber bawaan. Coba Lyricsify atau LRCLIB.';
+    toast('Lirik tidak ditemukan');
+  }
+});
+$('#lyrics-editor-load')?.addEventListener('click', () => { $('#lyrics-editor').value = currentLyricsAsLRC(); toast('Lirik saat ini dimuat ke editor'); });
+$('#lyrics-editor-apply')?.addEventListener('click', () => setLyricsFromEditor($('#lyrics-editor').value));
+$('#lyrics-editor-export')?.addEventListener('click', async () => {
+  const value = $('#lyrics-editor').value || currentLyricsAsLRC();
+  try { await navigator.clipboard.writeText(value); toast('Lirik disalin'); }
+  catch { $('#lyrics-editor').focus(); $('#lyrics-editor').select(); toast('Pilih teks lalu salin secara manual'); }
+});
+function applyLyricsStyle() {
+  const align = store.get('lyrics_align', 'center');
+  const color = store.get('lyrics_color', '#ffffff');
+  document.documentElement.style.setProperty('--lyrics-align', align);
+  document.documentElement.style.setProperty('--lyrics-color', color);
+  if ($('#lyrics-align')) $('#lyrics-align').value = align;
+  if ($('#lyrics-color')) $('#lyrics-color').value = color;
+}
+$('#lyrics-align')?.addEventListener('change', e => { store.set('lyrics_align', e.target.value); applyLyricsStyle(); });
+$('#lyrics-color')?.addEventListener('input', e => { store.set('lyrics_color', e.target.value); applyLyricsStyle(); });
+$('#lyrics-style-reset')?.addEventListener('click', () => { store.set('lyrics_align','center'); store.set('lyrics_color','#ffffff'); applyLyricsStyle(); toast('Tampilan lirik direset'); });
+applyLyricsStyle();
+// Restore user-edited lyrics per track before starting the network lookup.
+const originalLoadLyrics = loadLyrics;
+loadLyrics = async function(song, options = {}) {
+  if (song) {
+    const key = String(song.videoId || `${song.title || ''}::${song.artist || ''}`);
+    try {
+      const saved = JSON.parse(localStorage.getItem(`richmusic_lyrics_${key}`) || 'null');
+      if (saved?.raw) {
+        Player.lyrics = { synced: parseLRC(saved.raw).length ? saved.raw : null, plain: parseLRC(saved.raw).length ? null : saved.raw, source:saved.source || 'Manual edit', lines:parseLRC(saved.raw), translations:null, translationState:'idle' };
+        renderLyrics();
+        if (!options.silent) return;
+      }
+    } catch {}
+  }
+  return originalLoadLyrics(song, options);
+};
 
 $('#tb-search').addEventListener('click', () => go('#/search'));
 $('#np-sb').classList.toggle('on', Player.sbEnabled);
