@@ -9,6 +9,7 @@ on:
       - 'capacitor.config.json'
       - 'package.json'
       - '.github/workflows/android-apk.yml'
+      - 'scripts/**'
 
 permissions:
   contents: read
@@ -46,6 +47,9 @@ jobs:
 
       - name: Generate Android project
         run: npx cap add android
+
+      - name: Install native background playback service
+        run: bash scripts/install-android-background.sh
 
       - name: Sync Capacitor
         run: npx cap sync android
