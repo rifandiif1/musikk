@@ -34,7 +34,7 @@ assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause lo
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
 assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
-assert.match(sw, /rich-music-shell-v26/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v27/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -48,13 +48,19 @@ assert.match(workflow, /install-android-background\.sh/, 'Android workflow shoul
 const nativeScript = read('scripts/install-android-background.sh');
 assert.match(nativeScript, /new MediaPlayer\(\)/, 'Android native service should own local audio playback');
 assert.match(nativeScript, /new MediaSession\(this, \"RichMusicSession\"\)/, 'native player should expose an Android MediaSession');
+assert.match(nativeScript, /requestAudioFocus\(\)/, 'native playback should request audio focus');
+assert.match(nativeScript, /ACTION_SEEK/, 'native playback should support seeking');
+assert.match(nativeScript, /AudioFocusRequest/, 'Android 8+ playback should use AudioFocusRequest');
+assert.match(nativeScript, /import androidx\.activity\.result\.ActivityResult;/, 'Capacitor activity callback should use AndroidX ActivityResult');
+assert.doesNotMatch(nativeScript, /import com\.getcapacitor\.ActivityResult;/, 'invalid Capacitor ActivityResult import must not return');
 assert.match(nativeScript, /FOREGROUND_SERVICE_MEDIA_PLAYBACK/, 'native player should use media-playback foreground service type');
 assert.match(nativeScript, /POST_NOTIFICATIONS/, 'Android 13+ notification permission should be declared and requested');
 assert.match(app, /syncAndroidBackgroundPlayback/, 'YouTube background limitation should be documented in playback bridge');
 assert.match(app, /bridge\?\.pickAudio/, 'Android local file picker should be wired');
 assert.match(app, /playLocal\(\{ uri: picked\.uri/, 'native local audio should pass the selected content URI to the service');
+assert.match(app, /seekLocal\?\.\(\{ position:/, 'native audio timeline should send seek positions to Android');
 assert.match(html, /id="android-native-audio"/, 'native background player controls should exist');
-for (const id of ['android-audio-pick', 'android-audio-pause', 'android-audio-resume', 'android-audio-stop', 'android-audio-status']) assert.match(html, new RegExp(`id="${id}"`), `native player control ${id} should exist`);
+for (const id of ['android-audio-pick', 'android-audio-pause', 'android-audio-resume', 'android-audio-stop', 'android-audio-status', 'android-audio-seek', 'android-audio-position', 'android-audio-duration']) assert.match(html, new RegExp(`id="${id}"`), `native player control ${id} should exist`);
 assert.match(css, /capacitor-native #nowplaying \.np-inner/, 'native Android should reserve system-bar safe area');
 assert.match(css, /body\.lyrics-focus #nowplaying \.np-tabs/, 'immersive lyrics should hide the app tab bar');
 assert.match(css, /#miniplayer \{[^}]*bottom: calc\(var\(--navm-h\)/s, 'mini-player should sit above mobile navigation');
@@ -79,4 +85,4 @@ const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map((m) => m[1]);
 const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
 assert.deepEqual([...new Set(duplicates)], [], `duplicate HTML IDs found: ${[...new Set(duplicates)].join(', ')}`);
 
-console.log('Rich Music smoke tests passed: source copies, offline UI wiring, IndexedDB, EQ, lyrics/download routes, service-worker cache, Capacitor Android workflow, unique IDs, appearance settings, queue-to-playlist, and expanded keyboard controls.');
+console.log('Rich Music smoke tests passed: source copies, offline UI wiring, IndexedDB, EQ, lyrics/download routes, service-worker cache, Capacitor Android workflow, unique IDs, appearance settings, queue-to-playlist, keyboard controls, native seek timeline, and Android audio-focus handling.');

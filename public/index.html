@@ -324,7 +324,7 @@ try {
       <section id="android-native-audio" class="android-native-audio" aria-label="Pemutar audio native Android">
         <div class="android-native-audio-head"><div><strong>Android Background Player</strong><span>Putar file audio perangkat lewat pemutar native; dapat berlanjut saat aplikasi diminimalkan.</span></div><span class="native-audio-badge">NATIVE</span></div>
         <div class="android-native-audio-controls"><button type="button" id="android-audio-pick" class="pill-btn primary"><svg class="ic"><use href="#i-audio"/></svg> Pilih & putar file</button><button type="button" id="android-audio-pause" class="pill-btn"><svg class="ic"><use href="#i-pause"/></svg> Jeda</button><button type="button" id="android-audio-resume" class="pill-btn"><svg class="ic"><use href="#i-play"/></svg> Lanjutkan</button><button type="button" id="android-audio-stop" class="pill-btn"><svg class="ic"><use href="#i-x"/></svg> Berhenti</button></div>
-        <p id="android-audio-status" role="status" aria-live="polite">Pilih file audio lokal untuk mencoba pemutaran background native.</p>
+        <div class="native-audio-seek"><span id="android-audio-position">0:00</span><input id="android-audio-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Posisi audio native" disabled /><span id="android-audio-duration">0:00</span></div><p id="android-audio-status" role="status" aria-live="polite">Pilih file audio lokal untuk mencoba pemutaran background native.</p>
       </section>
       <canvas id="local-audio-spectrum" width="960" height="240" aria-label="Spectrum audio real-time"></canvas>
       <div id="local-audio-name">Belum ada file dipilih</div>

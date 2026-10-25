@@ -3492,6 +3492,10 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
   const nativeResume = $('#android-audio-resume');
   const nativeStop = $('#android-audio-stop');
   const nativeStatus = $('#android-audio-status');
+  const nativeSeek = $('#android-audio-seek');
+  const nativePosition = $('#android-audio-position');
+  const nativeDuration = $('#android-audio-duration');
+  let nativeSeeking = false;
   const isNativeAndroid = () => { try { return !!window.Capacitor?.isNativePlatform?.() && window.Capacitor?.getPlatform?.() === 'android'; } catch { return false; } };
   const nativeBridge = () => window.Capacitor?.Plugins?.BackgroundAudio;
   let nativeSelected = null;
@@ -3508,7 +3512,13 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
     if (!isNativeAndroid() || !bridge?.getState) return;
     try {
       const state = await bridge.getState();
-      if (state.active) nativeMessage(`${state.playing ? 'Sedang diputar' : 'Dijeda'} · ${state.title || 'Audio lokal'}${state.artist ? ` — ${state.artist}` : ''}${state.duration ? ` · ${fmtTime(state.position / 1000)} / ${fmtTime(state.duration / 1000)}` : ''}`);
+      if (state.active) nativeMessage(`${state.playing ? 'Sedang diputar' : 'Dijeda'} · ${state.title || 'Audio lokal'}${state.artist ? ` — ${state.artist}` : ''}`);
+      else if (nativeSeek && !nativeSeeking) { nativeSeek.disabled = true; nativeSeek.value = '0'; }
+      const duration = Math.max(0, Number(state.duration) || 0);
+      const position = Math.max(0, Math.min(duration, Number(state.position) || 0));
+      if (nativeSeek) { nativeSeek.disabled = !state.active || duration <= 0; nativeSeek.max = String(Math.max(1, duration)); if (!nativeSeeking) nativeSeek.value = String(position); }
+      if (nativePosition) nativePosition.textContent = fmtTime(position / 1000);
+      if (nativeDuration) nativeDuration.textContent = fmtTime(duration / 1000);
     } catch { /* Older APKs may not have the native bridge yet. */ }
   }
   nativePick?.addEventListener('click', async () => {
@@ -3530,7 +3540,13 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
   });
   nativePause?.addEventListener('click', async () => { try { await nativeBridge()?.pauseLocal?.(); await refreshNativeState(); } catch { nativeMessage('Tidak dapat menjeda pemutar native.', true); } });
   nativeResume?.addEventListener('click', async () => { try { await nativeBridge()?.resumeLocal?.(); await refreshNativeState(); } catch { nativeMessage('Tidak dapat melanjutkan pemutar native.', true); } });
-  nativeStop?.addEventListener('click', async () => { try { await nativeBridge()?.stopLocal?.(); nativeMessage('Pemutar audio native dihentikan.'); } catch { nativeMessage('Tidak dapat menghentikan pemutar native.', true); } });
+  nativeStop?.addEventListener('click', async () => { try { await nativeBridge()?.stopLocal?.(); if (nativeSeek) { nativeSeek.value = '0'; nativeSeek.disabled = true; } if (nativePosition) nativePosition.textContent = '0:00'; nativeMessage('Pemutar audio native dihentikan.'); } catch { nativeMessage('Tidak dapat menghentikan pemutar native.', true); } });
+  nativeSeek?.addEventListener('pointerdown', () => { nativeSeeking = true; });
+  nativeSeek?.addEventListener('input', () => { if (nativePosition) nativePosition.textContent = fmtTime((Number(nativeSeek.value) || 0) / 1000); });
+  const commitNativeSeek = async () => { if (!nativeSeek || !nativeSeeking) return; nativeSeeking = false; try { await nativeBridge()?.seekLocal?.({ position: Math.max(0, Number(nativeSeek.value) || 0) }); await refreshNativeState(); } catch { nativeMessage('Tidak dapat mengubah posisi audio.', true); } };
+  nativeSeek?.addEventListener('change', commitNativeSeek);
+  nativeSeek?.addEventListener('pointerup', commitNativeSeek);
+  nativeSeek?.addEventListener('keyup', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') commitNativeSeek(); });
 
   const DB_NAME = 'rich-music-local-library';
   const DB_VERSION = 1;

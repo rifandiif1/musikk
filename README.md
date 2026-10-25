@@ -196,3 +196,8 @@ The Android GitHub Actions workflow now patches the generated Capacitor project 
 ## v8 — UI personalization and queue tools
 
 Lihat [`README-v8.md`](README-v8.md) untuk fitur v8, cara menggunakan pengaturan tampilan, penyimpanan antrean sebagai playlist, validasi, dan batasan yang masih berlaku. Versi ini menambahkan enam warna aksen, mode UI ringkas, pengurangan animasi, pintasan shuffle/repeat/volume, dan penyimpanan antrean ke playlist.
+
+
+## Latest source update
+
+See [README-v9.md](README-v9.md) and [CHANGELOG-v9.md](CHANGELOG-v9.md) for the v9 native playback timeline and Android audio-focus improvements. APK build and physical-device behavior must still be verified in GitHub Actions/device testing.

@@ -90,3 +90,10 @@
 ## v8.0.1 — Capacitor ActivityResult import hotfix
 - Fixed the generated `BackgroundAudioPlugin.java` import to use `androidx.activity.result.ActivityResult`, which is the Activity Result API type expected by Capacitor's `@ActivityCallback` method signature.
 - This resolves the reported `cannot find symbol: class ActivityResult` compilation error at the source level. A full Gradle build is still required to verify the complete Android dependency/toolchain configuration.
+
+
+## v9 — Native playback improvements
+- Native local player timeline with seek support.
+- Android audio focus handling for interruption, ducking, and focus restoration.
+- Service worker cache bumped to v27.
+- Source tests passed; Gradle APK build and physical-device testing are not yet verified.
