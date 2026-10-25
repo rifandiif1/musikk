@@ -2303,10 +2303,13 @@ html.capacitor-native body.lyrics-focus #nowplaying .np-topbar { min-height:48px
   }
   #nav-mobile { z-index: 60 !important; }
   body.has-player #main { padding-bottom: calc(var(--navm-h) + env(safe-area-inset-bottom) + 102px) !important; }
-  html.capacitor-native #miniplayer { bottom: calc(var(--navm-h) + env(safe-area-inset-bottom) + 10px) !important; }
+  html.capacitor-native #miniplayer { bottom: calc(var(--navm-h) + env(safe-area-inset-bottom) + 10px) !important;
+  max-width: calc(100vw - 16px); }
 }
-html.capacitor-native body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
-html.capacitor-native #nowplaying:not(.hidden) { top: env(safe-area-inset-top); bottom: env(safe-area-inset-bottom); height:auto; }
+/* With StatusBar.overlaysWebView=false Android already lays out the WebView below the status bar.
+   Do not add env(safe-area-inset-top) to body as that double-offsets the whole app. */
+html.capacitor-native body { padding-top:0 !important; padding-bottom:0 !important; }
+html.capacitor-native #nowplaying:not(.hidden) { top:0; bottom:0; height:100dvh; }
 html.capacitor-native #nowplaying .np-inner { box-sizing:border-box; min-height:0; }
 body.lyrics-focus #nowplaying .np-topbar,
 body.lyrics-focus #nowplaying .np-tabs,
@@ -2334,4 +2337,66 @@ body.lyrics-focus #nowplaying #lyrics-container .lyric-line.active {
 @media (max-width:600px) {
   body.lyrics-focus #nowplaying #lyrics-container .lyric-line { font-size:clamp(24px,6.6vw,35px) !important; line-height:1.32; }
   body.lyrics-focus #nowplaying #lyrics-container .lyric-translation { font-size:clamp(14px,3.9vw,18px) !important; }
+}
+
+
+/* v7 Android background player and viewport polish */
+.android-native-audio { display:none; margin:12px 0 18px; padding:16px; border:1px solid rgba(130,230,160,.22); border-radius:18px; background:linear-gradient(145deg,rgba(65,160,95,.12),rgba(255,255,255,.025)); }
+.android-native-audio.is-available { display:block; }
+.android-native-audio-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+.android-native-audio-head strong { display:block; color:var(--text,#fff); font-size:14px; font-weight:800; }
+.android-native-audio-head span:not(.native-audio-badge) { display:block; margin-top:5px; color:var(--muted,#aaa); font-size:12px; line-height:1.55; }
+.native-audio-badge { flex:none; padding:4px 7px; border:1px solid rgba(130,230,160,.3); border-radius:999px; color:#8ce8a8; font-size:9px; font-weight:900; letter-spacing:.12em; }
+.android-native-audio-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:13px; }
+.android-native-audio-controls .pill-btn { display:inline-flex; align-items:center; gap:7px; min-height:36px; }
+.android-native-audio-controls .ic { width:15px; height:15px; }
+#android-audio-status { margin:11px 0 0; color:var(--muted,#aaa); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+#android-audio-status.is-error { color:#ff9d9d; }
+body.lyrics-focus #nowplaying .np-handle { display:none !important; }
+body.lyrics-focus #nowplaying .np-inner { padding-top:max(8px,env(safe-area-inset-top)) !important; padding-bottom:max(8px,env(safe-area-inset-bottom)) !important; }
+body.lyrics-focus #nowplaying #np-lyrics { min-height:0; overflow:hidden; }
+body.lyrics-focus #nowplaying #lyrics-container { overscroll-behavior:contain; scrollbar-width:none; }
+body.lyrics-focus #nowplaying #lyrics-container::-webkit-scrollbar { display:none; }
+@media (max-width:600px) {
+  .android-native-audio { padding:13px; }
+  .android-native-audio-controls .pill-btn { min-height:34px; padding:7px 10px; font-size:12px; }
+}
+
+/* v8 appearance controls and responsive polish */
+.settings-trigger { font-size: 19px; line-height: 1; font-weight: 700; }
+html[data-density="compact"] #view { padding-top: 2px; }
+html[data-density="compact"] .shelf { margin-top: 22px; }
+html[data-density="compact"] .shelf-title { margin-bottom: 10px; }
+html[data-density="compact"] .quick-card { padding: 7px; gap: 9px; }
+html[data-density="compact"] .track { min-height: 54px; }
+html[data-density="compact"] .track .art { width: 42px; height: 42px; }
+html[data-density="compact"] .card .art { border-radius: 7px; }
+html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+.q-note-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.q-save-playlist { flex-shrink:0; min-height:32px; padding:6px 10px; font-size:12px; }
+.appearance-settings { display:flex; flex-direction:column; gap:17px; }
+.appearance-section { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 0; border-bottom:1px solid var(--border); }
+.appearance-section h4 { font-size:14px; font-weight:800; margin-bottom:5px; }
+.appearance-section p { font-size:12px; line-height:1.45; color:var(--muted); max-width:330px; }
+.accent-grid { display:grid; grid-template-columns:repeat(3,minmax(58px,1fr)); gap:8px; }
+.accent-choice { display:flex; flex-direction:column; align-items:center; gap:6px; min-width:58px; padding:8px 7px; border:1px solid var(--border); border-radius:12px; background:var(--card); }
+.accent-choice.selected { border-color:var(--accent-bright); box-shadow:0 0 0 1px var(--accent-bright) inset; background:color-mix(in srgb,var(--accent) 12%,var(--card)); }
+.accent-choice span { width:23px; height:23px; border-radius:50%; background:linear-gradient(135deg,var(--swatch),var(--swatch-bright)); box-shadow:0 3px 10px color-mix(in srgb,var(--swatch) 35%,transparent); }
+.accent-choice small { font-size:10px; color:var(--muted); }
+.setting-segment { display:flex; padding:4px; border-radius:10px; background:var(--elevated); gap:3px; flex-shrink:0; }
+.setting-segment button { padding:8px 12px; border-radius:7px; color:var(--muted); font-size:12px; font-weight:700; }
+.setting-segment button.selected { background:var(--accent); color:#fff; }
+.setting-switch { display:flex; align-items:center; gap:9px; font-size:12px; flex-shrink:0; cursor:pointer; }
+.setting-switch input { width:18px; height:18px; accent-color:var(--accent); }
+.setting-switch b { min-width:62px; }
+.appearance-tip { display:flex; flex-direction:column; gap:5px; padding:12px 14px; background:color-mix(in srgb,var(--accent) 10%,var(--card)); border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border)); border-radius:12px; font-size:12px; line-height:1.45; }
+.appearance-tip span { color:var(--muted); }
+.appearance-actions { display:flex; justify-content:space-between; gap:10px; padding-top:2px; }
+@media (max-width:560px) {
+  .appearance-section { align-items:flex-start; flex-direction:column; gap:12px; }
+  .accent-grid { width:100%; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .accent-choice { min-width:0; }
+  .setting-segment { width:100%; }
+  .setting-segment button { flex:1; }
+  .appearance-actions .pill-btn { flex:1; }
 }

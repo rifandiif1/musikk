@@ -47,24 +47,11 @@ function applyTint(key) {
 }
 function currentTheme() { return 'dark'; }
 
-// Android native foreground-service bridge. This keeps the app process at foreground-service
-// priority while the embedded player is active; actual background continuation still depends
-// on the YouTube IFrame playback behavior and Android/device policy.
-function syncAndroidBackgroundPlayback(playing) {
-  try {
-    if (!window.Capacitor?.isNativePlatform?.()) return;
-    const bridge = window.Capacitor?.Plugins?.BackgroundAudio;
-    if (!bridge) return;
-    if (playing) {
-      const song = Player.current || {};
-      bridge.start({
-        title: String(displayTitle(song.title) || song.title || 'Rich Music').slice(0, 120),
-        artist: String(song.artist || 'Now playing').slice(0, 120),
-      }).catch(() => {});
-    } else {
-      bridge.stop().catch(() => {});
-    }
-  } catch {}
+// YouTube IFrame audio is web-owned and cannot be made reliably background-capable by
+// keeping a foreground service alive. The native service is reserved for Android-picked
+// local files, where MediaPlayer + MediaSession can own the audio lifecycle.
+function syncAndroidBackgroundPlayback(_playing) {
+  // Intentionally no-op for YouTube IFrame playback; see Android Background Player in Local Audio Lab.
 }
 
 // Mark the native wrapper so Android safe-area rules can be applied without changing the PWA.
@@ -1156,7 +1143,7 @@ function renderQueue() {
   const radio = upcoming.filter((x) => !x.q._user);
   const now = Player.current;
   let html = '';
-  html += `<div class="q-note">Your queue plays first. Radio fills in after.</div>`;
+  html += `<div class="q-note q-note-tools"><span>Your queue plays first. Radio fills in after.</span><button type="button" class="pill-btn q-save-playlist" id="q-save-playlist">${icon('i-save')}<span>Simpan sebagai playlist</span></button></div>`;
   if (now) {
     html += `<div class="q-head">Now playing</div>${trackRowHTML({ ...now, qi: Player.index }, true)}`;
   }
@@ -1231,6 +1218,17 @@ function renderQueue() {
   }
   const clr = $('#q-clear', el);
   if (clr) clr.addEventListener('click', clearUserQueue);
+  const saveQueue = $('#q-save-playlist', el);
+  if (saveQueue) saveQueue.addEventListener('click', () => {
+    const tracks = Player.queue.slice(Math.max(0, Player.index)).filter(q => q && q.videoId).map(q => songFromItem(q));
+    if (!tracks.length) { toast('Belum ada lagu untuk disimpan'); return; }
+    const name = window.prompt('Nama playlist dari antrean ini:', `Queue Mix ${new Date().toLocaleDateString('id-ID')}`);
+    if (!name || !name.trim()) return;
+    const pl = Library.createPlaylist(name.trim());
+    tracks.forEach(song => Library.addToPlaylist(pl.id, song));
+    renderSidebarLibrary();
+    toast(`Playlist “${name.trim()}” disimpan · ${tracks.length} lagu`);
+  });
   persistQueue();
 }
 async function loadRelated(force = false) {
@@ -2186,6 +2184,9 @@ function backupLibrary() {
       vol: store.get('vol', 100),
       sb_on: store.get('sb_on', true),
       yt_hq: store.get('yt_hq', false),
+      accent_preset: store.get('accent_preset', 'green'),
+      ui_density: store.get('ui_density', 'comfortable'),
+      ui_motion: store.get('ui_motion', 'full'),
     },
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2241,6 +2242,10 @@ function restoreLibrary() {
             Player.hq = d.settings.yt_hq;
             updateQualityButton();
           }
+          if (typeof d.settings.accent_preset === 'string' && ['green','blue','violet','rose','amber','cyan'].includes(d.settings.accent_preset)) store.set('accent_preset', d.settings.accent_preset);
+          if (d.settings.ui_density === 'compact' || d.settings.ui_density === 'comfortable') store.set('ui_density', d.settings.ui_density);
+          if (d.settings.ui_motion === 'reduced' || d.settings.ui_motion === 'full') store.set('ui_motion', d.settings.ui_motion);
+          if (typeof applyAppearanceSettings === 'function') applyAppearanceSettings();
         }
         renderSidebarLibrary();
         toast('Library restored');
@@ -2892,6 +2897,13 @@ function switchNPTab(name) {
 }
 $$('.np-tab').forEach((t) => t.addEventListener('click', () => switchNPTab(t.dataset.nptab)));
 
+function syncShuffleRepeatButtons() {
+  const sh = !!Player.shuffle;
+  ['#mini-shuffle', '#np-shuffle'].forEach(sel => { const el = $(sel); if (el) el.classList.toggle('on', sh); });
+  const repeatOn = Number(Player.repeat || 0) > 0;
+  const repeatIcon = icon(Number(Player.repeat || 0) === 2 ? 'i-repeat-1' : 'i-repeat');
+  ['#mini-repeat', '#np-repeat'].forEach(sel => { const el = $(sel); if (el) { el.classList.toggle('on', repeatOn); el.innerHTML = repeatIcon; } });
+}
 document.addEventListener('keydown', (e) => {
   const target = e.target;
   if (target && (target.isContentEditable || /INPUT|TEXTAREA|SELECT|BUTTON/.test(target.tagName || ''))) return;
@@ -2905,6 +2917,10 @@ document.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyL') { const wasHidden = $('#nowplaying').classList.contains('hidden'); if (wasHidden) { openNowPlaying(); switchNPTab('lyrics'); } else { switchNPTab('lyrics'); } }
   else if (e.code === 'KeyE') { if ($('#nowplaying').classList.contains('hidden')) { openNowPlaying(); switchNPTab('lyrics'); } openLyricsStudio('editor'); }
   else if (e.code === 'KeyP') { e.preventDefault(); toggleFloatWidget(); }
+  else if (e.code === 'KeyS') { Player.shuffle = !Player.shuffle; syncShuffleRepeatButtons(); persistQueue(); toast(Player.shuffle ? 'Shuffle aktif' : 'Shuffle nonaktif'); }
+  else if (e.code === 'KeyR') { Player.repeat = (Number(Player.repeat || 0) + 1) % 3; syncShuffleRepeatButtons(); persistQueue(); toast(['Repeat nonaktif', 'Repeat antrean', 'Repeat lagu'][Player.repeat]); }
+  else if (e.code === 'ArrowUp' && Player.yt && Player.ready) { e.preventDefault(); const v = Math.min(100, Number(Player.yt.getVolume?.() ?? 100) + 5); Player.yt.setVolume(v); $('#mini-volume').value = v; $('#np-volume').value = v; store.set('vol', v); }
+  else if (e.code === 'ArrowDown' && Player.yt && Player.ready) { e.preventDefault(); const v = Math.max(0, Number(Player.yt.getVolume?.() ?? 100) - 5); Player.yt.setVolume(v); $('#mini-volume').value = v; $('#np-volume').value = v; store.set('vol', v); }
   else if (e.code === 'KeyM' && Player.yt && Player.ready) {
     const vol = Number(Player.yt.getVolume?.() ?? 100);
     if (vol > 0) { store.set('last_nonzero_vol', vol); Player.yt.setVolume(0); $('#mini-volume').value = 0; $('#np-volume').value = 0; }
@@ -3470,7 +3486,51 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
   const saveBtn = $('#local-audio-save');
   const status = $('#local-audio-status');
   const libraryEl = $('#local-audio-library');
+  const nativeBox = $('#android-native-audio');
+  const nativePick = $('#android-audio-pick');
+  const nativePause = $('#android-audio-pause');
+  const nativeResume = $('#android-audio-resume');
+  const nativeStop = $('#android-audio-stop');
+  const nativeStatus = $('#android-audio-status');
+  const isNativeAndroid = () => { try { return !!window.Capacitor?.isNativePlatform?.() && window.Capacitor?.getPlatform?.() === 'android'; } catch { return false; } };
+  const nativeBridge = () => window.Capacitor?.Plugins?.BackgroundAudio;
+  let nativeSelected = null;
+  let nativePoll = null;
   if (!modal || !input || !audio || !canvas) return;
+  if (nativeBox && isNativeAndroid()) nativeBox.classList.add('is-available');
+  function nativeMessage(message, error = false) {
+    if (!nativeStatus) return;
+    nativeStatus.textContent = message;
+    nativeStatus.classList.toggle('is-error', error);
+  }
+  async function refreshNativeState() {
+    const bridge = nativeBridge();
+    if (!isNativeAndroid() || !bridge?.getState) return;
+    try {
+      const state = await bridge.getState();
+      if (state.active) nativeMessage(`${state.playing ? 'Sedang diputar' : 'Dijeda'} · ${state.title || 'Audio lokal'}${state.artist ? ` — ${state.artist}` : ''}${state.duration ? ` · ${fmtTime(state.position / 1000)} / ${fmtTime(state.duration / 1000)}` : ''}`);
+    } catch { /* Older APKs may not have the native bridge yet. */ }
+  }
+  nativePick?.addEventListener('click', async () => {
+    const bridge = nativeBridge();
+    if (!isNativeAndroid() || !bridge?.pickAudio || !bridge?.playLocal) {
+      nativeMessage('Fitur ini hanya tersedia pada APK Android v7 atau lebih baru.', true); return;
+    }
+    nativePick.disabled = true;
+    try {
+      const picked = await bridge.pickAudio();
+      nativeSelected = picked;
+      nativeMessage(`Menyiapkan ${picked.name || 'audio lokal'}…`);
+      await bridge.playLocal({ uri: picked.uri, title: picked.name || 'Audio lokal', artist: 'File lokal · Android' });
+      nativeMessage(`Memulai ${picked.name || 'audio lokal'}. Pemutaran native dapat terus berjalan ketika aplikasi diminimalkan.`);
+      await refreshNativeState();
+    } catch (error) {
+      nativeMessage(error?.message || 'Tidak dapat membuka audio native. Pastikan file audio dapat diakses.', true);
+    } finally { nativePick.disabled = false; }
+  });
+  nativePause?.addEventListener('click', async () => { try { await nativeBridge()?.pauseLocal?.(); await refreshNativeState(); } catch { nativeMessage('Tidak dapat menjeda pemutar native.', true); } });
+  nativeResume?.addEventListener('click', async () => { try { await nativeBridge()?.resumeLocal?.(); await refreshNativeState(); } catch { nativeMessage('Tidak dapat melanjutkan pemutar native.', true); } });
+  nativeStop?.addEventListener('click', async () => { try { await nativeBridge()?.stopLocal?.(); nativeMessage('Pemutar audio native dihentikan.'); } catch { nativeMessage('Tidak dapat menghentikan pemutar native.', true); } });
 
   const DB_NAME = 'rich-music-local-library';
   const DB_VERSION = 1;
@@ -3538,11 +3598,14 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
     modal.classList.remove('hidden');
     if (!raf) draw();
     renderLibrary();
+    refreshNativeState();
+    if (isNativeAndroid() && !nativePoll) nativePoll = setInterval(refreshNativeState, 1800);
   }
   function close() {
     modal.classList.add('hidden');
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    // Playback intentionally continues when the panel is closed.
+    if (nativePoll) { clearInterval(nativePoll); nativePoll = null; }
+    // Both local web audio and native Android audio intentionally continue when this panel closes.
   }
   $('#local-audio-open')?.addEventListener('click', open);
   $('#local-audio-close')?.addEventListener('click', close);
@@ -3871,6 +3934,9 @@ function openKeyboardHelp() {
     <div><kbd>Space</kbd><span>Putar / jeda</span></div>
     <div><kbd>←</kbd> / <kbd>→</kbd><span>Mundur / maju 5 detik</span></div>
     <div><kbd>Shift</kbd> + <kbd>←</kbd> / <kbd>→</kbd><span>Lagu sebelumnya / berikutnya</span></div>
+    <div><kbd>↑</kbd> / <kbd>↓</kbd><span>Naikkan / turunkan volume 5%</span></div>
+    <div><kbd>S</kbd><span>Aktifkan / nonaktifkan shuffle</span></div>
+    <div><kbd>R</kbd><span>Ganti mode repeat</span></div>
     <div><kbd>M</kbd><span>Mute / pulihkan volume</span></div>
     <div><kbd>L</kbd><span>Buka lirik fullscreen</span></div>
     <div><kbd>E</kbd><span>Buka Lyrics Studio (editor terpisah)</span></div>
@@ -3882,6 +3948,72 @@ function openKeyboardHelp() {
   $('#shortcut-close')?.addEventListener('click', closeModal);
 }
 $('#keyboard-help')?.addEventListener('click', openKeyboardHelp);
+
+/* ---- appearance & comfort settings ---- */
+const ACCENT_PRESETS = [
+  { id: 'green', label: 'Emerald', color: '#1db954', bright: '#1ed760' },
+  { id: 'blue', label: 'Ocean', color: '#3b82f6', bright: '#60a5fa' },
+  { id: 'violet', label: 'Violet', color: '#8b5cf6', bright: '#a78bfa' },
+  { id: 'rose', label: 'Rose', color: '#f43f5e', bright: '#fb7185' },
+  { id: 'amber', label: 'Amber', color: '#d97706', bright: '#fbbf24' },
+  { id: 'cyan', label: 'Ice', color: '#0891b2', bright: '#22d3ee' },
+];
+function applyAppearanceSettings() {
+  const accent = ACCENT_PRESETS.find(x => x.id === store.get('accent_preset', 'green')) || ACCENT_PRESETS[0];
+  document.documentElement.style.setProperty('--accent', accent.color);
+  document.documentElement.style.setProperty('--accent-bright', accent.bright);
+  document.documentElement.style.setProperty('--eq', accent.bright);
+  document.documentElement.dataset.density = store.get('ui_density', 'comfortable');
+  document.documentElement.dataset.motion = store.get('ui_motion', 'full');
+  const theme = store.get('theme', 'dark');
+  document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+}
+function openAppearanceSettings() {
+  const modal = $('#modal');
+  const body = $('#modal-body');
+  const actions = $('.modal-actions');
+  if (!modal || !body) return;
+  const selectedAccent = store.get('accent_preset', 'green');
+  const density = store.get('ui_density', 'comfortable');
+  const motion = store.get('ui_motion', 'full');
+  const compactLabels = { comfortable: 'Nyaman', compact: 'Ringkas' };
+  $('#modal-title').textContent = 'Pengaturan Rich Music';
+  if (actions) actions.classList.add('hidden');
+  body.innerHTML = `
+    <div class="appearance-settings">
+      <section class="appearance-section"><div><h4>Warna aksen</h4><p>Pilih karakter warna untuk tombol, indikator, dan visualizer.</p></div>
+        <div class="accent-grid">${ACCENT_PRESETS.map(a => `<button type="button" class="accent-choice ${a.id === selectedAccent ? 'selected' : ''}" data-accent="${a.id}" aria-pressed="${a.id === selectedAccent}" title="${a.label}"><span style="--swatch:${a.color};--swatch-bright:${a.bright}"></span><small>${a.label}</small></button>`).join('')}</div>
+      </section>
+      <section class="appearance-section"><div><h4>Kepadatan tampilan</h4><p>Atur ruang antar elemen sesuai ukuran layar.</p></div>
+        <div class="setting-segment"><button type="button" data-density="comfortable" class="${density === 'comfortable' ? 'selected' : ''}">Nyaman</button><button type="button" data-density="compact" class="${density === 'compact' ? 'selected' : ''}">Ringkas</button></div>
+      </section>
+      <section class="appearance-section"><div><h4>Animasi antarmuka</h4><p>Kurangi animasi untuk perangkat yang lebih ringan.</p></div>
+        <label class="setting-switch"><input id="setting-reduced-motion" type="checkbox" ${motion === 'reduced' ? 'checked' : ''}><span></span><b>${motion === 'reduced' ? 'Dikurangi' : 'Aktif'}</b></label>
+      </section>
+      <div class="appearance-tip"><b>Tip performa</b><span>Mode Ringkas + Animasi Dikurangi membantu UI terasa lebih ringan di perangkat dengan spesifikasi rendah.</span></div>
+      <div class="appearance-actions"><button type="button" class="pill-btn" id="appearance-reset">Pulihkan default</button><button type="button" class="pill-btn primary" id="appearance-done">Selesai</button></div>
+    </div>`;
+  body.querySelectorAll('[data-accent]').forEach(btn => btn.addEventListener('click', () => {
+    store.set('accent_preset', btn.dataset.accent); applyAppearanceSettings();
+    body.querySelectorAll('[data-accent]').forEach(b => { const on = b === btn; b.classList.toggle('selected', on); b.setAttribute('aria-pressed', String(on)); });
+  }));
+  body.querySelectorAll('[data-density]').forEach(btn => btn.addEventListener('click', () => {
+    store.set('ui_density', btn.dataset.density); applyAppearanceSettings();
+    body.querySelectorAll('[data-density]').forEach(b => b.classList.toggle('selected', b === btn));
+  }));
+  $('#setting-reduced-motion')?.addEventListener('change', e => {
+    store.set('ui_motion', e.target.checked ? 'reduced' : 'full'); applyAppearanceSettings();
+    const label = e.target.closest('.setting-switch')?.querySelector('b'); if (label) label.textContent = e.target.checked ? 'Dikurangi' : 'Aktif';
+  });
+  $('#appearance-reset')?.addEventListener('click', () => {
+    store.set('accent_preset', 'green'); store.set('ui_density', 'comfortable'); store.set('ui_motion', 'full'); applyAppearanceSettings();
+    openAppearanceSettings(); toast('Pengaturan tampilan dipulihkan');
+  });
+  $('#appearance-done')?.addEventListener('click', closeModal);
+  modal.classList.remove('hidden');
+}
+$('#appearance-settings')?.addEventListener('click', openAppearanceSettings);
+applyAppearanceSettings();
 
 function applyLyricsStyle() {
   const align = store.get('lyrics_align', 'left');

@@ -68,3 +68,21 @@
 - Move the mini-player above the mobile navigation bar.
 - Generate Android launcher/splash assets from `resources/icon.png` and `resources/splash.png`; use a dedicated monochrome notification icon.
 - Background playback is still not guaranteed: current audio is supplied by YouTube IFrame and the foreground service does not own the audio stream.
+
+
+## v7 — Android local audio background player
+
+- Added a native Android file picker and `MediaPlayer` service for local audio playback independent of the WebView lifecycle.
+- Added native `MediaSession` state/metadata and notification pause, resume, and stop actions.
+- Added wake-lock and Android 13+ notification permission declarations/request.
+- Added Android-only background-player controls to Local Audio Lab; existing web audio, IndexedDB, EQ, and spectrum remain available.
+- Corrected Android safe-area double-padding and polished immersive lyrics layout and Android mini-player spacing.
+- Explicitly stopped presenting the foreground service as a way to keep YouTube IFrame audio alive. YouTube IFrame background playback remains unsupported/unverified.
+
+## v8 — UI personalization and queue tools
+- Added a top-bar appearance panel with six accent presets, compact/comfortable density, and reduced-motion preference.
+- Included new appearance preferences in library backup and restore.
+- Added save-current-queue-as-local-playlist workflow.
+- Added keyboard shortcuts for shuffle, repeat, and volume adjustments.
+- Bumped service-worker cache to v26 and expanded static smoke tests.
+- `npm test` passes; APK build and physical-device testing have not been performed in this environment.

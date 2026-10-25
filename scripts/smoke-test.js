@@ -34,7 +34,7 @@ assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause lo
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
 assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
-assert.match(sw, /rich-music-shell-v24/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v26/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -45,19 +45,38 @@ assert.match(app, /https:\/\/musikk-delta\.vercel\.app/, 'native API requests sh
 assert.match(workflow, /assembleDebug/, 'Android workflow should build a debug APK');
 assert.match(workflow, /upload-artifact@v4/, 'Android workflow should publish the APK artifact');
 assert.match(workflow, /install-android-background\.sh/, 'Android workflow should install the native background service');
-assert.match(app, /syncAndroidBackgroundPlayback/, 'playback state should synchronize with native background service');
+const nativeScript = read('scripts/install-android-background.sh');
+assert.match(nativeScript, /new MediaPlayer\(\)/, 'Android native service should own local audio playback');
+assert.match(nativeScript, /new MediaSession\(this, \"RichMusicSession\"\)/, 'native player should expose an Android MediaSession');
+assert.match(nativeScript, /FOREGROUND_SERVICE_MEDIA_PLAYBACK/, 'native player should use media-playback foreground service type');
+assert.match(nativeScript, /POST_NOTIFICATIONS/, 'Android 13+ notification permission should be declared and requested');
+assert.match(app, /syncAndroidBackgroundPlayback/, 'YouTube background limitation should be documented in playback bridge');
+assert.match(app, /bridge\?\.pickAudio/, 'Android local file picker should be wired');
+assert.match(app, /playLocal\(\{ uri: picked\.uri/, 'native local audio should pass the selected content URI to the service');
+assert.match(html, /id="android-native-audio"/, 'native background player controls should exist');
+for (const id of ['android-audio-pick', 'android-audio-pause', 'android-audio-resume', 'android-audio-stop', 'android-audio-status']) assert.match(html, new RegExp(`id="${id}"`), `native player control ${id} should exist`);
 assert.match(css, /capacitor-native #nowplaying \.np-inner/, 'native Android should reserve system-bar safe area');
 assert.match(css, /body\.lyrics-focus #nowplaying \.np-tabs/, 'immersive lyrics should hide the app tab bar');
 assert.match(css, /#miniplayer \{[^}]*bottom: calc\(var\(--navm-h\)/s, 'mini-player should sit above mobile navigation');
+assert.match(css, /body\.lyrics-focus #nowplaying \.np-topbar,[\s\S]*?display:none !important/, 'immersive lyrics should hide the player header');
+assert.match(css, /html\.capacitor-native body \{ padding-top:0 !important; padding-bottom:0 !important; \}/, 'native safe area should not double-pad the WebView');
 assert.ok(fs.existsSync(path.join(root, 'resources/icon.png')), 'native launcher icon source must exist');
 assert.match(html, /id="lyrics-focus-exit"/, 'immersive lyrics needs an exit control');
 assert.match(css, /lyric-line\.active/, 'lyrics should have premium active-line styling');
 assert.match(css, /#modal \{[^}]*z-index: 760/, 'Now Playing menus should render above the player overlay');
 assert.match(app, /html\.replace\('Your Library<\/span>', 'Library<\/span>'\)/, 'mobile navigation should use a compact Library label');
+assert.match(html, /id="appearance-settings"/, 'appearance settings must be reachable from the top bar');
+assert.match(app, /ACCENT_PRESETS = \[/, 'custom accent palette should be available');
+assert.match(app, /function applyAppearanceSettings\(\)/, 'appearance preferences should apply to the UI');
+assert.match(css, /html\[data-density="compact"\]/, 'compact density mode should have dedicated styling');
+assert.match(css, /html\[data-motion="reduced"\]/, 'reduced motion mode should reduce UI animations');
+assert.match(app, /q-save-playlist/, 'queue can be saved as a playlist');
+assert.match(app, /e\.code === 'KeyS'/, 'keyboard shortcuts should include shuffle');
+assert.match(app, /e\.code === 'KeyR'/, 'keyboard shortcuts should include repeat');
 
 // Catch duplicate IDs in the actual HTML document.
 const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map((m) => m[1]);
 const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
 assert.deepEqual([...new Set(duplicates)], [], `duplicate HTML IDs found: ${[...new Set(duplicates)].join(', ')}`);
 
-console.log('Rich Music smoke tests passed: source copies, offline UI wiring, IndexedDB, EQ, lyrics/download routes, service-worker cache, Capacitor Android workflow, unique IDs.');
+console.log('Rich Music smoke tests passed: source copies, offline UI wiring, IndexedDB, EQ, lyrics/download routes, service-worker cache, Capacitor Android workflow, unique IDs, appearance settings, queue-to-playlist, and expanded keyboard controls.');

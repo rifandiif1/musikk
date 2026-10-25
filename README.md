@@ -182,3 +182,17 @@ The Android GitHub Actions workflow now patches the generated Capacitor project 
 ### v6 verification status
 
 `npm test` and shell syntax validation passed in the development environment. The Android APK was not built or tested on a physical device in this session.
+
+
+## v7 — native background audio for Android local files
+
+- Local Audio Lab now has an Android-only **Android Background Player** panel.
+- Use **Pilih & putar file** to select an audio file via Android's document picker. It is played by Android `MediaPlayer` in a `mediaPlayback` foreground service with a native `MediaSession`, wake lock, and notification pause/resume/stop controls.
+- This native path can continue while Rich Music is minimized or the screen is off, subject to Android battery policy and the user's notification permission.
+- The web audio player, IndexedDB library, EQ and spectrum continue to work as before.
+- Important: this does **not** make YouTube IFrame playback background-capable. YouTube playback remains inside the web player and can pause when minimized. The native background player currently plays files selected through its Android picker; it does not import IndexedDB blobs or take over YouTube streams.
+- Android notification permission is requested on Android 13+. A successful source smoke test is not the same as a successful APK build or device test.
+
+## v8 — UI personalization and queue tools
+
+Lihat [`README-v8.md`](README-v8.md) untuk fitur v8, cara menggunakan pengaturan tampilan, penyimpanan antrean sebagai playlist, validasi, dan batasan yang masih berlaku. Versi ini menambahkan enam warna aksen, mode UI ringkas, pengurangan animasi, pintasan shuffle/repeat/volume, dan penyimpanan antrean ke playlist.
