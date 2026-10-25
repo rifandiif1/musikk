@@ -1,0 +1,8 @@
+{
+  "appId": "com.richmusic.app",
+  "appName": "Rich Music",
+  "webDir": "public",
+  "android": {
+    "allowMixedContent": false
+  }
+}

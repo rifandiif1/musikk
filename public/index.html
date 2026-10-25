@@ -64,6 +64,7 @@ try {
   <symbol id="i-save" viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.7L5 21V4a1 1 0 0 1 1-1zm1 2v12.3l5-3.3 5 3.3V5H7z"/></symbol>
   <symbol id="i-save-f" viewBox="0 0 24 24"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4.7L5 21V4a1 1 0 0 1 1-1z"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M11 3h2v10.2l3.6-3.6L18 11l-6 6-6-6 1.4-1.4L11 13.2V3zM4 19h16v2H4v-2z"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 24 24"><path d="M3 10h2v4H3zm4-4h2v12H7zm4 2h2v8h-2zm4-5h2v18h-2zm4 7h2v4h-2z"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M13 21h-2V10.8l-3.6 3.6L6 13l6-6 6 6-1.4 1.4-3.6-3.6V21zM4 3h16v2H4V3z"/></symbol>
   <symbol id="i-expand" viewBox="0 0 24 24"><path d="M3 3h8v2H5v6H3V3zm10 0h8v8h-2V5h-6V3zM3 13h2v6h6v2H3v-8zm16 0h2v8h-8v-2h6v-6z"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10h4v10H4zm6 0V4h4v16h-4zm6 0v-7h4v7h-4z"/></symbol>
@@ -204,6 +205,7 @@ try {
             <button id="np-addpl" class="pill-btn"><svg class="ic"><use href="#i-plus"/></svg><span>Playlist</span></button>
             <button id="np-more" class="pill-btn" title="More"><svg class="ic"><use href="#i-more"/></svg><span>More</span></button>
             <button id="np-download" class="pill-btn np-extra" title="Download"><svg class="ic"><use href="#i-download"/></svg><span>Download</span></button>
+            <button id="local-audio-open" class="pill-btn np-extra" title="Putar file lokal offline dengan visualizer real-time"><svg class="ic"><use href="#i-audio"/></svg><span>Audio lokal / Viz</span></button>
             <button id="np-share" class="pill-btn np-extra" title="Share"><svg class="ic"><use href="#i-share"/></svg><span>Share</span></button>
             <button id="np-speed" class="pill-btn np-extra" title="Playback speed"><svg class="ic"><use href="#i-clock"/></svg><span>1×</span></button>
             <button id="np-float" class="pill-btn np-extra" title="Floating widget"><svg class="ic"><use href="#i-pip"/></svg><span>Widget</span></button>
@@ -225,6 +227,8 @@ try {
           <div class="lyrics-toolbar" aria-label="Lyrics controls">
             <div class="lyrics-toolbar-label"><span id="lyrics-track-title">LYRICS</span> <span id="lyrics-translation-status" class="lyrics-translation-status">Terjemahan manual</span></div>
             <div class="lyrics-toolbar-actions">
+              <button type="button" id="lyrics-choices-search" class="lyrics-tool" title="Cari beberapa versi lirik">Pilih lirik</button>
+              <select id="lyrics-candidate-select" class="lyrics-candidate-select" aria-label="Pilih versi lirik" hidden><option value="">Pilih versi lirik…</option></select>
               <button type="button" id="lyrics-manual-toggle" class="lyrics-tool" title="Buka Lyrics Studio" aria-haspopup="dialog" aria-expanded="false">Lyrics Studio</button>
               <button type="button" id="lyrics-style-toggle" class="lyrics-tool" title="Atur tampilan lirik di Lyrics Studio" aria-haspopup="dialog" aria-expanded="false">Aa</button>
               <button type="button" id="lyrics-translate" class="lyrics-tool" title="Terjemahkan lirik ke Bahasa Indonesia" aria-label="Terjemahkan lirik ke Bahasa Indonesia">ID ↻</button>
@@ -306,6 +310,19 @@ try {
       <button type="button" class="fw-btn" data-fw="next" title="Next"><svg class="ic"><use href="#i-next"/></svg></button>
       <button type="button" class="fw-btn" data-fw="close" title="Close widget"><svg class="ic"><use href="#i-x"/></svg></button>
     </div>
+  </div>
+
+
+  <div id="local-audio-lab" class="local-audio-lab hidden" role="dialog" aria-modal="true" aria-labelledby="local-audio-title">
+    <div class="local-audio-backdrop" data-close-local-audio></div>
+    <section class="local-audio-window">
+      <header><div><p class="lyrics-studio-eyebrow">RICH MUSIC / OFFLINE</p><h2 id="local-audio-title">Local Audio Lab</h2><p>Pilih file audio yang tersimpan di perangkat. Pemutaran offline dan spectrum analyzer bekerja untuk file lokal.</p></div><button type="button" id="local-audio-close" class="icon-btn" aria-label="Tutup Local Audio Lab">✕</button></header>
+      <label class="local-audio-pick">Pilih file audio <input id="local-audio-file" type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" /></label>
+      <canvas id="local-audio-spectrum" width="960" height="240" aria-label="Spectrum audio real-time"></canvas>
+      <div id="local-audio-name">Belum ada file dipilih</div>
+      <audio id="local-audio-element" controls preload="metadata"></audio>
+      <p class="local-audio-note">Visualizer ini menganalisis audio file lokal secara real-time. Audio dari YouTube IFrame tidak dapat dianalisis langsung karena batasan keamanan lintas-origin.</p>
+    </section>
   </div>
 
   <!-- hidden YouTube player + canvas/video used for OS Picture-in-Picture (recent apps) -->

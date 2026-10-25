@@ -2,13 +2,16 @@
 
 Rich Music adalah antarmuka pemutar musik berbasis web dengan tema gelap, inspirasi desain music streaming modern, pemutar **Now Playing** layar penuh, serta tampilan lirik/karaoke.
 
-> **Catatan penting:** paket ini berisi frontend (`index.html`, `app.js`, dan `styles.css`). Fitur musik seperti Home, pencarian, chart, rekomendasi, dan beberapa data pemutar menggunakan endpoint backend `/api/...`. Karena kode backend tidak disertakan dalam paket ini, aplikasi tidak akan berfungsi penuh jika hanya diunggah sebagai situs statis ke GitHub Pages. Jalankan bersama backend yang kompatibel atau sesuaikan endpoint API di `app.js`.
+> **Catatan penting:** paket ini menyertakan frontend dan backend Express (`server.js`, `api/index.js`). Untuk fitur online, jalankan backend Node.js atau deploy dengan konfigurasi Vercel yang disertakan. Situs statis saja tidak menyediakan endpoint API.
 
 ## Fitur
 
 - **Home** dengan banner, aksen hijau, dan bagian musik.
 - Pemutar **Now Playing** layar penuh dengan tab **Song**, **Lyrics**, **Queue**, dan **Related**.
-- Lirik dengan dukungan pencarian sumber lirik, tampilan sinkron/karaoke jika data bertimestamp tersedia, dan **Lyrics Studio** untuk mengedit atau menyelaraskan lirik.
+- Lirik dengan sinkronisasi/karaoke jika timestamp tersedia, **pilihan kandidat lirik dari beberapa sumber**, cache lirik untuk pembacaan offline, dan **Lyrics Studio** untuk mengedit atau menyelaraskan lirik.
+- **Local Audio Lab**: memutar file audio yang sudah tersimpan di perangkat secara offline, dengan spectrum analyzer Web Audio real-time.
+- Unduhan MP3 menggunakan konverter pihak ketiga yang sudah ada; keberhasilan dan ketersediaannya bergantung pada layanan eksternal.
+- Mode lirik otomatis immersive saat pemutar terbuka dan orientasi berubah ke landscape.
 - Pencarian musik, chart, mood, related tracks, dan queue melalui backend API.
 - Playlist dan preferensi lokal yang disimpan di browser.
 - Floating player dan pintasan keyboard.
@@ -93,3 +96,34 @@ Rich Music menggunakan layanan eksternal sesuai fitur yang dipakai, termasuk You
 ## Status proyek
 
 Antarmuka dan fitur dapat berubah seiring pembaruan. Endpoint backend, format respons API, dan dukungan layanan eksternal perlu cocok dengan versi frontend yang digunakan.
+
+## Changelog — Premium Web / Android preparation
+
+### Added
+- Endpoint `GET /api/lyrics/search` mengumpulkan kandidat lirik LRCLIB dan menambahkan hasil dari NetEase, lyrics.ovh, dan Textyl jika tersedia.
+- Tombol **Pilih lirik** dan dropdown untuk menerapkan kandidat. Pilihan tersimpan per lagu di penyimpanan lokal.
+- Cache lirik di `localStorage`, dengan fallback saat endpoint lirik tidak dapat dijangkau.
+- **Local Audio Lab** untuk memilih file audio lokal, memutarnya tanpa koneksi internet, dan menampilkan spectrum yang benar-benar dihitung oleh `AnalyserNode` Web Audio.
+- Pergantian otomatis ke mode lirik immersive ketika pemutar terbuka lalu orientasi menjadi landscape.
+- Service-worker cache version dinaikkan agar aset frontend baru dimuat ulang.
+
+### Important limitations
+- YouTube IFrame Player tidak mengekspos PCM audio ke Web Audio API karena batasan lintas-origin. Spectrum real-time pada rilis ini berlaku untuk **file audio lokal** di Local Audio Lab; jangan menyamakan animasi dekoratif dengan analisis audio YouTube.
+- Unduhan MP3 bergantung pada konverter eksternal dan hak/ketersediaan konten. Gunakan hanya untuk konten yang memang boleh diunduh.
+- Cache PWA dan cache lirik membantu akses offline, tetapi streaming YouTube dan endpoint backend tetap memerlukan internet. File offline diputar melalui Local Audio Lab dengan memilih file dari perangkat.
+- APK native belum dibangun atau diuji dalam lingkungan ini. Web source kompatibel dengan deployment Vercel yang ada, sedangkan paket Android native perlu dikonfigurasi dan diuji terpisah.
+
+## Menyiapkan pembungkus Android (opsional)
+
+Proyek saat ini adalah aplikasi web. Untuk membuat proyek pembungkus Android, instal Capacitor di salinan proyek dan arahkan WebView ke deployment Rich Music yang memiliki backend API, atau siapkan API base khusus untuk aplikasi native. Contoh awal:
+
+```bash
+npm install @capacitor/core @capacitor/cli @capacitor/android
+npx cap init "Rich Music" "com.richmusic.app" --web-dir public
+npx cap add android
+npx cap sync android
+npx cap open android
+```
+
+Perintah ini hanya membuat kerangka proyek Android; belum mengaktifkan pemutaran latar belakang native. Untuk playback background yang andal, implementasikan dan uji Android MediaSession/foreground service pada proyek native, karena WebView/YouTube IFrame saja tidak menjaminnya.
+

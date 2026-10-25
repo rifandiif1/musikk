@@ -786,6 +786,62 @@ function extractYtmLyrics(d) {
   return null;
 }
 
+app.get('/api/lyrics/search', async (req, res) => {
+  const title = String(req.query.title || '').trim();
+  const artist = String(req.query.artist || '').trim();
+  const duration = Number(req.query.duration || 0);
+  if (!title) return res.status(400).json({ error: 'title is required', candidates: [] });
+  try {
+    const searches = await Promise.all([
+      lrclibSearch({ track_name: title, artist_name: artist }),
+      lrclibSearch({ q: `${title} ${artist}`.trim() }),
+      lrclibSearch({ track_name: title }),
+    ]);
+    const all = searches.flat();
+    const seen = new Set();
+    const candidates = all
+      .filter((c) => c && !c.instrumental && (c.syncedLyrics || c.plainLyrics))
+      .map((c) => ({
+        title: c.trackName || title,
+        artist: c.artistName || artist,
+        album: c.albumName || '',
+        duration: Number(c.duration) || 0,
+        synced: c.syncedLyrics || null,
+        plain: c.plainLyrics || null,
+        source: 'LRCLIB',
+        id: c.id || null,
+      }))
+      .filter((c) => {
+        const key = `${c.title.toLowerCase()}|${c.artist.toLowerCase()}|${(c.synced || c.plain || '').slice(0, 100)}`;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      })
+      .sort((a, b) => {
+        const score = (c) => simScore(c.title, title) * 2 + simScore(c.artist, artist) + (c.synced ? 0.8 : 0) + (duration && c.duration && Math.abs(duration-c.duration) <= 3 ? 0.7 : 0);
+        return score(b) - score(a);
+      })
+      .slice(0, 12);
+
+    // Add independent catalogs as additional options, without making the main lookup slower.
+    const [ne, ovh, tx] = await Promise.all([
+      neteaseLyrics(title, artist), lyricsOvh(title, artist), textylLyrics(title, artist),
+    ]);
+    const extras = [
+      ne && { title, artist, synced: ne.synced || null, plain: ne.plain || null, source: 'NetEase' },
+      ovh && { title, artist, synced: null, plain: ovh, source: 'lyrics.ovh' },
+      tx && { title, artist, synced: tx, plain: null, source: 'Textyl' },
+    ].filter((c) => c && (c.synced || c.plain));
+    for (const c of extras) {
+      const key = `${c.title.toLowerCase()}|${c.artist.toLowerCase()}|${(c.synced || c.plain || '').slice(0, 100)}`;
+      if (!seen.has(key)) { seen.add(key); candidates.push(c); }
+    }
+    res.set('Cache-Control', 'private, max-age=60');
+    res.json({ candidates: candidates.slice(0, 15) });
+  } catch (e) {
+    res.status(502).json({ error: 'Lyrics search unavailable', candidates: [] });
+  }
+});
+
 app.get('/api/lyrics', async (req, res) => {
   const { title = '', artist = '', duration = 0, browseId = '' } = req.query;
   try {
