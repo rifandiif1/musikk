@@ -43,6 +43,31 @@ function applyTint(key) {
 }
 function currentTheme() { return 'dark'; }
 
+// Android native foreground-service bridge. This keeps the app process at foreground-service
+// priority while the embedded player is active; actual background continuation still depends
+// on the YouTube IFrame playback behavior and Android/device policy.
+function syncAndroidBackgroundPlayback(playing) {
+  try {
+    if (!window.Capacitor?.isNativePlatform?.()) return;
+    const bridge = window.Capacitor?.Plugins?.BackgroundAudio;
+    if (!bridge) return;
+    if (playing) {
+      const song = Player.current || {};
+      bridge.start({
+        title: String(displayTitle(song.title) || song.title || 'Rich Music').slice(0, 120),
+        artist: String(song.artist || 'Now playing').slice(0, 120),
+      }).catch(() => {});
+    } else {
+      bridge.stop().catch(() => {});
+    }
+  } catch {}
+}
+
+// Mark the native wrapper so Android safe-area rules can be applied without changing the PWA.
+try {
+  if (window.Capacitor?.isNativePlatform?.()) document.documentElement.classList.add('capacitor-native');
+} catch {}
+
 function updateThemeIcon() {
   const use = $('#theme-ic use');
   if (use) use.setAttribute('href', currentTheme() === 'light' ? '#i-moon' : '#i-sun');
@@ -299,6 +324,8 @@ window.onYouTubeIframeAPIReady = () => {
           setTimeout(applyPlaybackQuality, 2000);
         }
         if (e.data === YT.PlayerState.BUFFERING) applyPlaybackQuality();
+        if (e.data === YT.PlayerState.PLAYING) syncAndroidBackgroundPlayback(true);
+        else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) syncAndroidBackgroundPlayback(false);
         document.body.classList.toggle('paused', e.data !== YT.PlayerState.PLAYING);
         renderPlayButtons();
       },
@@ -1583,7 +1610,8 @@ function renderNav() {
   // desktop sidebar: only Home + Search (Spotify layout); library lives in its own box
   $('#nav-desktop').innerHTML = NAV.filter((n) => ['home', 'search', 'charts'].includes(n.id))
     .map((n) => `<button class="nav-item" data-id="${n.id}" data-ic="${n.icon}" data-ica="${n.iconActive}" onclick="location.hash='${n.hash}'"><svg class="ic"><use href="#${n.icon}"/></svg><span>${n.label}</span></button>`).join('');
-  $('#nav-mobile').innerHTML = html;
+  // Compact label on phones: keeps the premium bottom bar balanced.
+  $('#nav-mobile').innerHTML = html.replace('Your Library</span>', 'Library</span>');
   renderSidebarLibrary();
 }
 function setActiveNav(id) {

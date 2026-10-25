@@ -828,7 +828,7 @@ body:not(.paused) .np-art-wrap { transform: scale(1.01); }
 .loading-note { color: var(--muted); text-align: center; padding: 40px 0; font-weight: 500; }
 
 /* modal */
-#modal { position: fixed; inset: 0; z-index: 80; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); }
+#modal { position: fixed; inset: 0; z-index: 400; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); }
 #modal.hidden { display: none; }
 .modal-card {
   background: var(--card-hover); border-radius: 16px; padding: 24px;
@@ -2116,4 +2116,180 @@ body.lyrics-focus #nowplaying .lyrics-toolbar { padding-top:8px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .local-audio-track, .local-audio-track-actions .pill-btn { transition:none !important; }
+}
+
+
+/* Premium mobile navigation + modal layering fix (v4) */
+@media (max-width: 860px) {
+  :root { --navm-h: 70px; }
+  #nav-mobile {
+    height: calc(var(--navm-h) + env(safe-area-inset-bottom));
+    align-items: stretch; gap: 5px; padding: 7px 10px calc(7px + env(safe-area-inset-bottom));
+    background: rgba(10, 12, 11, .94);
+    border-top: 1px solid rgba(255,255,255,.08);
+    box-shadow: 0 -10px 30px rgba(0,0,0,.28);
+    backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+  }
+  #nav-mobile .nav-item {
+    position: relative; min-width: 0; flex: 1; border-radius: 14px; padding: 6px 4px;
+    gap: 4px; color: rgba(255,255,255,.56); font-size: 10px; font-weight: 650;
+    letter-spacing: .01em; transition: background .18s ease, color .18s ease;
+  }
+  #nav-mobile .nav-item .ic { width: 21px; height: 21px; transition: transform .18s ease; }
+  #nav-mobile .nav-item.active { color: #fff; background: rgba(30,215,96,.13); }
+  #nav-mobile .nav-item.active .ic { color: var(--accent-bright); transform: translateY(-1px); }
+  #nav-mobile .nav-item.active span { color: #fff; }
+  #nav-mobile .nav-item:active { transform: scale(.97); }
+}
+/* Menus opened from Now Playing must render above the player, including immersive lyrics. */
+#modal { z-index: 400 !important; padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom)); }
+#modal .modal-card { position: relative; z-index: 401; width: min(92vw, 440px); max-height: min(82dvh, 720px); overscroll-behavior: contain; }
+#modal .modal-row { min-height: 46px; border-radius: 12px; }
+#modal .modal-row:active { background: rgba(30,215,96,.14); }
+
+/* v5 — premium Now Playing, immersive lyrics, Android system-bar safe areas. */
+#modal { z-index: 760 !important; }
+#nowplaying:not(.hidden) {
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 16% 10%, rgba(91,229,138,.10), transparent 38%),
+    radial-gradient(ellipse at 92% 80%, rgba(84,118,255,.075), transparent 34%),
+    #070807 !important;
+}
+#nowplaying #np-bg { opacity:.72; filter:blur(90px) brightness(.25) saturate(1.28); }
+#nowplaying .np-inner {
+  position:relative; z-index:1;
+  padding-top:max(22px, env(safe-area-inset-top)) !important;
+  padding-bottom:max(20px, env(safe-area-inset-bottom)) !important;
+}
+#nowplaying .np-topbar {
+  min-height:48px; gap:12px;
+  padding:0 2px 8px;
+}
+#nowplaying .np-caption {
+  font-size:11px; font-weight:850; letter-spacing:.19em;
+  text-transform:uppercase; color:rgba(255,255,255,.74);
+}
+#nowplaying .np-topbar .icon-btn {
+  width:42px; height:42px; border:1px solid rgba(255,255,255,.09);
+  background:rgba(255,255,255,.045); border-radius:15px;
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+}
+#nowplaying .np-tabs {
+  padding:5px; gap:4px; border:1px solid rgba(255,255,255,.075);
+  border-radius:16px; background:rgba(255,255,255,.035);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+#nowplaying .np-tab {
+  min-height:38px; padding:0 15px; border-radius:12px;
+  color:rgba(255,255,255,.56); transition:background .2s ease,color .2s ease,box-shadow .2s ease;
+}
+#nowplaying .np-tab.active {
+  color:#f7fff9; background:linear-gradient(135deg,rgba(91,229,138,.19),rgba(91,229,138,.075));
+  box-shadow:inset 0 0 0 1px rgba(91,229,138,.17),0 5px 22px rgba(0,0,0,.16);
+}
+#nowplaying #np-player .np-art-wrap {
+  overflow:hidden; border-radius:clamp(18px,2.5vw,30px);
+  border:1px solid rgba(255,255,255,.12); padding:7px;
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.018));
+  box-shadow:0 28px 90px rgba(0,0,0,.42),0 0 55px rgba(91,229,138,.055);
+}
+#nowplaying #np-player #np-art { border-radius:calc(clamp(18px,2.5vw,30px) - 7px); }
+#nowplaying #np-player #np-title { text-wrap:balance; }
+#nowplaying #np-player #np-artist { margin-top:8px; color:rgba(255,255,255,.58); }
+#nowplaying #np-player .np-seek input { accent-color:#72e89b; }
+#nowplaying #np-player .np-controls .play-big {
+  width:72px; height:72px; border-radius:50%;
+  background:linear-gradient(145deg,#f7fff9,#bdeecb) !important;
+  box-shadow:0 10px 32px rgba(91,229,138,.20),inset 0 1px 0 #fff;
+}
+#nowplaying #np-player .np-controls .icon-btn { width:44px; height:44px; border-radius:15px; }
+#nowplaying #np-player .np-actions .pill-btn {
+  min-height:38px; border-radius:13px; border-color:rgba(255,255,255,.10);
+  background:rgba(255,255,255,.045); color:rgba(255,255,255,.83);
+  transition:background .18s ease,border-color .18s ease,transform .18s ease;
+}
+#nowplaying #np-player .np-actions .pill-btn:active { transform:scale(.97); }
+#nowplaying #np-player #np-lyric-preview {
+  border-radius:20px; border-color:rgba(255,255,255,.09);
+  background:linear-gradient(135deg,rgba(255,255,255,.065),rgba(255,255,255,.018));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 12px 35px rgba(0,0,0,.12);
+}
+#nowplaying #np-player .np-side-panel {
+  border:1px solid rgba(255,255,255,.07); border-radius:22px;
+  background:linear-gradient(150deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
+  padding:20px; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+}
+#nowplaying #np-lyrics {
+  background:radial-gradient(ellipse at 50% 42%,rgba(91,229,138,.045),transparent 52%),#050605 !important;
+}
+#nowplaying .lyrics-toolbar {
+  border:1px solid rgba(255,255,255,.075); border-radius:17px;
+  background:rgba(255,255,255,.035); padding:10px 12px;
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+}
+#nowplaying .lyrics-toolbar-label { color:rgba(255,255,255,.75); letter-spacing:.09em; }
+#nowplaying .lyrics-tool {
+  border-radius:11px; border-color:rgba(255,255,255,.11);
+  background:rgba(255,255,255,.045); transition:all .18s ease;
+}
+#nowplaying .lyrics-tool:hover { border-color:rgba(114,232,155,.42); background:rgba(91,229,138,.09); }
+#nowplaying #lyrics-container {
+  scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.14) transparent;
+  overscroll-behavior:contain; -webkit-overflow-scrolling:touch;
+}
+#nowplaying #lyrics-container .lyric-line-wrap {
+  padding-block:clamp(3px,.8vh,9px); transition:opacity .25s ease,transform .25s ease;
+}
+#nowplaying #lyrics-container .lyric-line {
+  width:fit-content; max-width:100%; border-radius:16px;
+  color:rgba(255,255,255,.37); font-weight:760;
+  line-height:1.3; letter-spacing:-.035em;
+  transition:color .28s ease,background .28s ease,text-shadow .28s ease,transform .28s ease;
+}
+#nowplaying #lyrics-container .lyric-line.past { color:rgba(255,255,255,.46); }
+#nowplaying #lyrics-container .lyric-line.active {
+  color:#f7fff9; background:linear-gradient(100deg,rgba(91,229,138,.115),rgba(91,229,138,.025) 76%,transparent);
+  text-shadow:0 0 30px rgba(91,229,138,.09); transform:translateX(3px);
+}
+#nowplaying #lyrics-container .lyric-line.active::before {
+  width:3px; border-radius:8px; background:#76eca0; box-shadow:0 0 18px rgba(91,229,138,.48);
+}
+#nowplaying #lyrics-container .lyric-translation {
+  color:rgba(196,218,202,.58); font-weight:500; line-height:1.55;
+  padding:2px 12px 5px; max-width:900px;
+}
+#nowplaying #lyrics-container .lyric-word.word-active {
+  color:#92f4b0; text-shadow:0 0 20px rgba(91,229,138,.28);
+}
+/* WebView may draw edge-to-edge on Android. Reserve the status/navigation bar area explicitly. */
+html.capacitor-native #nowplaying .np-inner {
+  padding-top:max(30px, env(safe-area-inset-top)) !important;
+  padding-bottom:max(24px, env(safe-area-inset-bottom)) !important;
+}
+html.capacitor-native #nowplaying .np-topbar { padding-top:2px; }
+html.capacitor-native body.lyrics-focus #nowplaying .np-inner {
+  padding-top:max(28px, env(safe-area-inset-top)) !important;
+  padding-bottom:max(24px, env(safe-area-inset-bottom)) !important;
+}
+html.capacitor-native body.lyrics-focus #nowplaying .np-topbar { min-height:48px; }
+@media (max-width:900px) {
+  #nowplaying .np-inner { padding-left:clamp(15px,4vw,26px) !important; padding-right:clamp(15px,4vw,26px) !important; }
+  #nowplaying .np-tabs { margin-top:8px; margin-bottom:8px; }
+  #nowplaying #np-player.active { gap:clamp(10px,1.7vh,16px); }
+  #nowplaying #np-player .np-art-wrap { width:min(47vw,270px); max-width:270px; }
+  #nowplaying #np-player #np-title { font-size:clamp(25px,7vw,35px); }
+  #nowplaying #np-player .np-controls .play-big { width:62px; height:62px; }
+  #nowplaying #np-player .np-actions { gap:7px; flex-wrap:wrap; }
+  #nowplaying #np-player .np-actions .pill-btn { min-height:36px; padding:7px 10px; }
+  body.lyrics-focus #nowplaying #lyrics-container { padding-top:clamp(18px,5vh,48px); padding-bottom:max(30px,env(safe-area-inset-bottom)); }
+  body.lyrics-focus #nowplaying #lyrics-container .lyric-line { font-size:clamp(23px,6.1vw,34px) !important; line-height:1.25; }
+  body.lyrics-focus #nowplaying #lyrics-container .lyric-translation { font-size:clamp(14px,3.8vw,18px) !important; }
+}
+@media (max-height:700px) and (max-width:900px) {
+  #nowplaying .np-inner { padding-top:max(22px,env(safe-area-inset-top)) !important; }
+  #nowplaying .np-topbar { min-height:40px; }
+  #nowplaying .np-tabs { margin-top:4px; margin-bottom:4px; }
+  #nowplaying #np-player .np-art-wrap { width:min(35vw,200px); }
+  #nowplaying #np-player .np-controls .play-big { width:52px; height:52px; }
 }

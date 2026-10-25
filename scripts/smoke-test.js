@@ -33,7 +33,7 @@ assert.match(app, /getByteFrequencyData\(bins\)/, 'visualizer should use real an
 assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause local audio');
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
-assert.match(sw, /rich-music-shell-v21/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v23/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -41,6 +41,12 @@ assert.equal(capacitor.appId, 'com.richmusic.app', 'Capacitor app ID should be s
 assert.equal(capacitor.server.url, 'https://musikk-delta.vercel.app', 'Android wrapper should use the deployed app so hosted API routes work');
 assert.match(workflow, /assembleDebug/, 'Android workflow should build a debug APK');
 assert.match(workflow, /upload-artifact@v4/, 'Android workflow should publish the APK artifact');
+assert.match(workflow, /install-android-background\.sh/, 'Android workflow should install the native background service');
+assert.match(app, /syncAndroidBackgroundPlayback/, 'playback state should synchronize with native background service');
+assert.match(css, /capacitor-native #nowplaying \.np-inner/, 'native Android should reserve system-bar safe area');
+assert.match(css, /lyric-line\.active/, 'lyrics should have premium active-line styling');
+assert.match(css, /#modal \{[^}]*z-index: 760/, 'Now Playing menus should render above the player overlay');
+assert.match(app, /html\.replace\('Your Library<\/span>', 'Library<\/span>'\)/, 'mobile navigation should use a compact Library label');
 
 // Catch duplicate IDs in the actual HTML document.
 const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map((m) => m[1]);

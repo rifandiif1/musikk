@@ -34,3 +34,20 @@
 - Configured the wrapper to load the existing Vercel deployment so relative API calls continue to reach the hosted backend.
 - Documented the hosted-wrapper architecture and its current limitations: internet requirement, WebView-scoped offline storage, and no native background MediaSession yet.
 - APK build/device testing is pending; no successful APK build is claimed from this environment.
+
+
+## v4 — Android mobile UI fixes
+- Redesigned the phone bottom navigation with a glass surface, active state, improved spacing, and a compact “Library” label.
+- Raised the shared modal layer above Now Playing and immersive lyrics so the three-dot More menu is not hidden behind the player.
+- Bumped the service-worker shell cache to v22 so updated web assets can be fetched.
+- Added smoke checks for the navigation and modal layering fixes.
+- Background playback caveat remains: this APK loads the hosted website inside a WebView and uses the YouTube IFrame player. Reliable playback after the Android app is minimized requires changing the playback architecture to a native-supported audio source with Android MediaSession/foreground service; a CSS/JavaScript change alone cannot guarantee it.
+
+## v5 — Premium Now Playing, lyrics and Android background-service foundation
+- Redesigned Now Playing surfaces with glass-like tabs, refined artwork frame, premium controls, subtle ambient gradients and improved spacing.
+- Improved synced lyrics focus, active-line treatment, translation readability and touch scrolling.
+- Added native-wrapper safe-area spacing so Now Playing and fullscreen lyrics leave room for Android status/navigation bars.
+- Fixed modal stacking order so the More menu can appear above the fullscreen Now Playing overlay.
+- Added a Capacitor Android foreground service and notification, registered through a native plugin and driven by YouTube player PLAYING/PAUSED events.
+- Bumped service-worker shell cache to v23.
+- Background playback caveat: the service keeps the Android app process at foreground-service priority, but the web player is still the YouTube IFrame. Continuation can vary by YouTube embed behavior, Android version and device power policy; this is not equivalent to a native audio engine and requires device testing.
