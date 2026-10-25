@@ -4,7 +4,7 @@ set -euo pipefail
 MANIFEST="android/app/src/main/AndroidManifest.xml"
 MAIN="android/app/src/main/java/com/richmusic/app/MainActivity.java"
 PKGDIR="android/app/src/main/java/com/richmusic/app"
-mkdir -p "$PKGDIR"
+mkdir -p "$PKGDIR" android/app/src/main/res/drawable
 
 cat > "$PKGDIR/BackgroundAudioPlugin.java" <<'JAVA'
 package com.richmusic.app;
@@ -89,7 +89,7 @@ public class BackgroundAudioService extends Service {
         PendingIntent contentIntent = openApp == null ? null : PendingIntent.getActivity(this, 7402, openApp,
             PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(getApplicationInfo().icon)
+            .setSmallIcon(R.drawable.ic_stat_music)
             .setContentTitle(title)
             .setContentText(artist + " · Rich Music")
             .setSubText("Playback active")
@@ -109,6 +109,12 @@ public class BackgroundAudioService extends Service {
     @Override public IBinder onBind(Intent intent) { return null; }
 }
 JAVA
+
+cat > android/app/src/main/res/drawable/ic_stat_music.xml <<'XML'
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+  <path android:fillColor="#FFFFFFFF" android:pathData="M12,3v11.2a3.5,3.5 0,1 0,2 3.2V7h6V3z" />
+</vector>
+XML
 
 python3 - <<'PY'
 from pathlib import Path

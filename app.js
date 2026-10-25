@@ -10,8 +10,12 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 const icon = (id, cls = 'ic') => `<svg class="${cls}"><use href="#${id}"/></svg>`;
 
+const API_BASE = (() => {
+  try { return window.Capacitor?.isNativePlatform?.() ? 'https://musikk-delta.vercel.app' : ''; } catch { return ''; }
+})();
 const api = async (path) => {
-  const r = await fetch(path);
+  const target = /^https?:\/\//i.test(path) ? path : `${API_BASE}${path}`;
+  const r = await fetch(target);
   if (!r.ok) throw new Error(`${path} -> ${r.status}`);
   return r.json();
 };
@@ -65,7 +69,14 @@ function syncAndroidBackgroundPlayback(playing) {
 
 // Mark the native wrapper so Android safe-area rules can be applied without changing the PWA.
 try {
-  if (window.Capacitor?.isNativePlatform?.()) document.documentElement.classList.add('capacitor-native');
+  if (window.Capacitor?.isNativePlatform?.()) {
+    document.documentElement.classList.add('capacitor-native');
+    const statusBar = window.Capacitor?.Plugins?.StatusBar;
+    statusBar?.setOverlaysWebView?.({ overlay: false })?.catch?.(() => {});
+    statusBar?.setBackgroundColor?.({ color: '#080b09' })?.catch?.(() => {});
+    statusBar?.setStyle?.({ style: 'LIGHT' })?.catch?.(() => {});
+    statusBar?.show?.()?.catch?.(() => {});
+  }
 } catch {}
 
 function updateThemeIcon() {
@@ -3125,7 +3136,7 @@ function loadPipArt(url) {
   const img = new Image();
   img.onload = () => { pipArtImg = img; drawPipFrame(); };
   img.onerror = () => { pipArtImg = null; };
-  img.src = '/api/thumb?url=' + encodeURIComponent(url);
+  img.src = `${API_BASE}/api/thumb?url=` + encodeURIComponent(url);
 }
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -3416,6 +3427,19 @@ function setLyricsFocus(enabled) {
   }
 }
 lyricsFocusButton?.addEventListener('click', () => setLyricsFocus(true));
+$('#lyrics-focus-exit')?.addEventListener('click', () => {
+  setLyricsFocus(false);
+  $$('.np-tab').forEach((b) => b.classList.toggle('active', b.dataset.nptab === 'player'));
+  $$('.np-pane').forEach((pane) => pane.classList.toggle('active', pane.id === 'np-player'));
+});
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && document.body.classList.contains('lyrics-focus')) {
+    event.stopImmediatePropagation();
+    setLyricsFocus(false);
+    $$('.np-tab').forEach((b) => b.classList.toggle('active', b.dataset.nptab === 'player'));
+    $$('.np-pane').forEach((pane) => pane.classList.toggle('active', pane.id === 'np-player'));
+  }
+}, true);
 /* Auto-switch to immersive lyrics when the open player rotates to landscape.
    Only reverse the switch when landscape itself initiated it. */
 let landscapeOpenedLyrics = false;

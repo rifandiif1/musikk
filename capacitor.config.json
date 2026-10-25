@@ -2,12 +2,14 @@
   "appId": "com.richmusic.app",
   "appName": "Rich Music",
   "webDir": "public",
-  "server": {
-    "url": "https://musikk-delta.vercel.app",
-    "cleartext": false,
-    "allowNavigation": ["musikk-delta.vercel.app"]
-  },
   "android": {
     "allowMixedContent": false
+  },
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": false,
+      "backgroundColor": "#080b09",
+      "style": "LIGHT"
+    }
   }
 }

@@ -159,3 +159,26 @@ The mobile bottom navigation now uses a more polished glass treatment and a shor
 The Android GitHub Actions workflow now patches the generated Capacitor project with `BackgroundAudioPlugin` and `BackgroundAudioService`. When the YouTube IFrame reports `PLAYING`, the native foreground service displays an ongoing playback notification with the current title and artist; it is stopped when the player reports a non-playing state. Native Android safe-area CSS is also applied to the fullscreen player and lyrics.
 
 **Important limitation:** playback still comes from the official YouTube IFrame inside a WebView. A foreground service helps the process remain important to Android but cannot guarantee that YouTube's embedded player continues audio after minimizing on every device. Reliable, fully native background playback requires a supported native audio source/engine and media session; do not treat this best-effort integration as verified until tested on the target phone.
+
+
+## Android v6 fixes
+
+- APK now bundles `public/` instead of loading the deployed website as its UI. Previous APKs could ignore UI changes because `capacitor.config.json` pointed at the hosted site. API requests still use `https://musikk-delta.vercel.app`.
+- Android StatusBar is configured not to overlay the WebView; the Android status bar remains visible. Fullscreen lyrics hides the in-app Now Playing header, tabs and lyrics toolbar; a small exit control remains.
+- Mini-player is offset above mobile navigation. `resources/icon.png` and `resources/splash.png` generate Android launcher/splash assets; the playback notification uses a dedicated monochrome icon.
+- **Background playback limitation:** the foreground service provides process priority and a notification, but does not decode or own audio. Playback still uses the YouTube IFrame, so background continuation is not guaranteed and is not claimed as fixed. Reliable background playback requires a supported native audio source/player and MediaSession integration.
+
+- Because the bundled APK now calls the hosted API cross-origin, redeploy the backend to Vercel after this update so its CORS headers are active.
+
+
+## Android v6 fixes and deployment notes
+
+- The APK bundles `public/` instead of loading the deployed website as its UI. Previous builds could ignore local UI changes because `capacitor.config.json` pointed at the hosted site.
+- The app's `/api/*` requests and thumbnail requests now use `https://musikk-delta.vercel.app`; the Express backend sends CORS headers for the native app origin. **Redeploy this repository to Vercel before testing the v6 APK**, otherwise the live backend will not have the new CORS behavior.
+- The Android StatusBar plugin is configured not to overlay the WebView, while leaving the Android status bar visible. Fullscreen lyrics hides the in-app Now Playing header, tabs and lyrics toolbar; a small exit control remains.
+- The mini-player is offset above mobile navigation. Android launcher/splash assets are generated from `resources/icon.png` and `resources/splash.png`; the notification uses a dedicated monochrome icon.
+- **Background playback remains unresolved.** The foreground service can display a notification and improve process priority, but it does not decode or own the audio. The current YouTube IFrame may pause when the app is backgrounded. Reliable background playback requires a supported native audio source/player and MediaSession integration; this source does not claim that to be fixed.
+
+### v6 verification status
+
+`npm test` and shell syntax validation passed in the development environment. The Android APK was not built or tested on a physical device in this session.

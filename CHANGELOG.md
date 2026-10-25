@@ -51,3 +51,20 @@
 - Added a Capacitor Android foreground service and notification, registered through a native plugin and driven by YouTube player PLAYING/PAUSED events.
 - Bumped service-worker shell cache to v23.
 - Background playback caveat: the service keeps the Android app process at foreground-service priority, but the web player is still the YouTube IFrame. Continuation can vary by YouTube embed behavior, Android version and device power policy; this is not equivalent to a native audio engine and requires device testing.
+
+
+## v6 — Android bundle, safe areas and lyrics fullscreen
+- Bundle the local frontend in the APK while routing API calls to the hosted backend.
+- Configure native status bar non-overlay behavior and keep the Android system status bar visible.
+- Hide in-app chrome during immersive lyrics, add an exit button, and offset mini-player above mobile navigation.
+- Add Android launcher/splash icon generation and a dedicated monochrome playback notification icon.
+- Document that a foreground service alone cannot guarantee YouTube IFrame background playback.
+
+
+## v6 — Bundle UI, safe areas, icons and immersive lyrics
+- APK now bundles the local frontend rather than loading the hosted site, so UI source changes are included in each build.
+- API requests and thumbnails route to the deployed Vercel backend; CORS headers were added for the native app origin. Redeploy Vercel to activate them.
+- Keep Android status bar visible and prevent WebView overlay; hide in-app Now Playing header, tabs and lyric toolbar during fullscreen lyrics, with a compact exit control.
+- Move the mini-player above the mobile navigation bar.
+- Generate Android launcher/splash assets from `resources/icon.png` and `resources/splash.png`; use a dedicated monochrome notification icon.
+- Background playback is still not guaranteed: current audio is supplied by YouTube IFrame and the foreground service does not own the audio stream.

@@ -3,6 +3,15 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
+// The Android APK bundles its UI and calls this hosted API from capacitor://localhost.
+// API responses are public music metadata, so allow cross-origin GETs without credentials.
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 

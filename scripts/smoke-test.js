@@ -33,17 +33,24 @@ assert.match(app, /getByteFrequencyData\(bins\)/, 'visualizer should use real an
 assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause local audio');
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
-assert.match(sw, /rich-music-shell-v23/, 'service worker cache version should be bumped after asset changes');
+assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
+assert.match(sw, /rich-music-shell-v24/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
 assert.equal(capacitor.appId, 'com.richmusic.app', 'Capacitor app ID should be stable');
-assert.equal(capacitor.server.url, 'https://musikk-delta.vercel.app', 'Android wrapper should use the deployed app so hosted API routes work');
+assert.equal(capacitor.webDir, 'public', 'Android APK should bundle the current local UI instead of loading a stale hosted UI');
+assert.ok(!capacitor.server, 'Capacitor must not override the bundled UI with a remote server URL');
+assert.match(app, /https:\/\/musikk-delta\.vercel\.app/, 'native API requests should still use the deployed backend');
 assert.match(workflow, /assembleDebug/, 'Android workflow should build a debug APK');
 assert.match(workflow, /upload-artifact@v4/, 'Android workflow should publish the APK artifact');
 assert.match(workflow, /install-android-background\.sh/, 'Android workflow should install the native background service');
 assert.match(app, /syncAndroidBackgroundPlayback/, 'playback state should synchronize with native background service');
 assert.match(css, /capacitor-native #nowplaying \.np-inner/, 'native Android should reserve system-bar safe area');
+assert.match(css, /body\.lyrics-focus #nowplaying \.np-tabs/, 'immersive lyrics should hide the app tab bar');
+assert.match(css, /#miniplayer \{[^}]*bottom: calc\(var\(--navm-h\)/s, 'mini-player should sit above mobile navigation');
+assert.ok(fs.existsSync(path.join(root, 'resources/icon.png')), 'native launcher icon source must exist');
+assert.match(html, /id="lyrics-focus-exit"/, 'immersive lyrics needs an exit control');
 assert.match(css, /lyric-line\.active/, 'lyrics should have premium active-line styling');
 assert.match(css, /#modal \{[^}]*z-index: 760/, 'Now Playing menus should render above the player overlay');
 assert.match(app, /html\.replace\('Your Library<\/span>', 'Library<\/span>'\)/, 'mobile navigation should use a compact Library label');
