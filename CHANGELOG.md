@@ -86,3 +86,7 @@
 - Added keyboard shortcuts for shuffle, repeat, and volume adjustments.
 - Bumped service-worker cache to v26 and expanded static smoke tests.
 - `npm test` passes; APK build and physical-device testing have not been performed in this environment.
+
+## v8.0.1 — Capacitor ActivityResult import hotfix
+- Fixed the generated `BackgroundAudioPlugin.java` import to use `androidx.activity.result.ActivityResult`, which is the Activity Result API type expected by Capacitor's `@ActivityCallback` method signature.
+- This resolves the reported `cannot find symbol: class ActivityResult` compilation error at the source level. A full Gradle build is still required to verify the complete Android dependency/toolchain configuration.
