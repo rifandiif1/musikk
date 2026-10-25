@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js && node --check public/app.js && node --check public/service-worker.js && node --check api/index.js",
-    "test": "npm run check"
+    "test": "npm run check && node scripts/smoke-test.js"
   },
   "keywords": [],
   "author": "",

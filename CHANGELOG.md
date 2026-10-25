@@ -1,20 +1,36 @@
-# Changelog — Rich Music Premium Update
+# Changelog — Rich Music Premium
 
-## Added
-- API `GET /api/lyrics/search` for multi-candidate lyrics from LRCLIB plus available NetEase, lyrics.ovh, and Textyl results.
-- Lyrics source selector with local persistence of the chosen lyrics per track.
-- Cached lyric text/LRC fallback when online lyrics lookup fails.
-- Local Audio Lab: local-file offline playback with a real Web Audio `AnalyserNode` frequency spectrum.
-- Automatic immersive lyrics view when the player is open and the screen rotates to landscape.
-- Capacitor starter config for later Android packaging; this is not a built or verified APK.
+## 2026-10-25 — Offline Library & Audio Lab refinement
 
-## Validation
-- `node --check` passes for the frontend and backend JavaScript files.
-- Duplicate HTML `id` check passes for `public/index.html`.
-- Runtime HTTP/API smoke test could not be completed because `express` was not installed in the test environment; `npm ci` timed out. Install dependencies and run `npm test` before deployment.
+### Added
+- Persistent **Local Audio Library** backed by IndexedDB. Users can save an audio file selected from the device, list saved tracks, play a saved track, and remove it from the local library.
+- Three-band EQ for local files (bass shelf, mid peaking filter, treble shelf), with slider values persisted locally.
+- Offline library status messages and error handling for unsupported browsers, unavailable storage, and storage quota failures.
+- Sleep timer now also pauses Local Audio Lab playback, not only the YouTube IFrame player.
+- Static smoke-test script covering root/public file parity, offline controls, IndexedDB wiring, EQ nodes, lyrics/download routes, service worker cache version, and duplicate HTML IDs.
 
-## Known limitations
-- YouTube IFrame audio cannot be connected to Web Audio spectrum analysis due to cross-origin restrictions. Real spectrum analysis is provided for user-selected local audio files only.
-- Online streaming, online lyrics lookup, and the external MP3 converter require internet access and provider availability.
-- Downloading is not the same as offline playback. For offline playback, select an audio file saved on the device in Local Audio Lab.
-- The Android project and background playback service have not been built or tested. Reliable background playback needs native Android MediaSession/foreground-service implementation.
+### Changed
+- Updated the service-worker cache key to `rich-music-shell-v21` so previously cached app assets are invalidated.
+- Kept root `app.js`, `index.html`, and `styles.css` synchronized with their `public/` copies for Node/Vercel workflows.
+- Added responsive AMOLED-styled layouts for the offline library and equalizer.
+- Added a single-source playback safeguard: starting a local audio file pauses the YouTube IFrame player when it is ready.
+
+### Verification
+- `npm run check`: passed (Node syntax checks for server, frontend, service worker, and Vercel entry).
+- `node scripts/smoke-test.js`: passed (static wiring and file-consistency checks).
+- `npm test`: passed after the smoke test was corrected.
+- `npm ci --ignore-scripts --no-audit --no-fund`: timed out in this environment; backend runtime and live provider integrations could not be tested here.
+- No APK was built or tested on a physical Android device in this update.
+
+### Known limitations
+- The Local Audio Library stores files in the browser/WebView's IndexedDB origin. Clearing site/app data or uninstalling the app may remove those files; this is not yet an Android shared-storage download manager.
+- Real-time spectrum and EQ apply to Local Audio Lab files only. YouTube IFrame audio is cross-origin and cannot be routed directly through Web Audio API.
+- Reliable background playback with Android lock-screen controls still requires a native Android MediaSession/foreground service implementation and device-level validation.
+- MP3 download depends on the configured third-party conversion service and may fail when that service changes, rate-limits, or rejects a video.
+- LRC timing quality and candidate availability depend on external lyric catalogues.
+
+## v1.2.0 — Android build pipeline preparation
+- Added a manual and push-triggered GitHub Actions workflow to generate a Capacitor Android wrapper, run the source smoke tests, build a debug APK, and upload it as an artifact.
+- Configured the wrapper to load the existing Vercel deployment so relative API calls continue to reach the hosted backend.
+- Documented the hosted-wrapper architecture and its current limitations: internet requirement, WebView-scoped offline storage, and no native background MediaSession yet.
+- APK build/device testing is pending; no successful APK build is claimed from this environment.

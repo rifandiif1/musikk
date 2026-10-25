@@ -318,10 +318,17 @@ try {
     <section class="local-audio-window">
       <header><div><p class="lyrics-studio-eyebrow">RICH MUSIC / OFFLINE</p><h2 id="local-audio-title">Local Audio Lab</h2><p>Pilih file audio yang tersimpan di perangkat. Pemutaran offline dan spectrum analyzer bekerja untuk file lokal.</p></div><button type="button" id="local-audio-close" class="icon-btn" aria-label="Tutup Local Audio Lab">✕</button></header>
       <label class="local-audio-pick">Pilih file audio <input id="local-audio-file" type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" /></label>
+      <div class="local-audio-actions"><button type="button" id="local-audio-save" class="pill-btn primary" disabled>Simpan ke pustaka offline</button><span id="local-audio-status" role="status" aria-live="polite">File yang disimpan tersedia setelah halaman dibuka kembali di browser yang sama.</span></div>
       <canvas id="local-audio-spectrum" width="960" height="240" aria-label="Spectrum audio real-time"></canvas>
       <div id="local-audio-name">Belum ada file dipilih</div>
       <audio id="local-audio-element" controls preload="metadata"></audio>
-      <p class="local-audio-note">Visualizer ini menganalisis audio file lokal secara real-time. Audio dari YouTube IFrame tidak dapat dianalisis langsung karena batasan keamanan lintas-origin.</p>
+      <section class="local-audio-library-section" aria-labelledby="local-audio-library-title"><div class="local-audio-section-title"><h3 id="local-audio-library-title">Pustaka offline</h3><span>Disimpan di perangkat ini</span></div><div id="local-audio-library"><p class="local-audio-empty">Belum ada lagu tersimpan.</p></div></section>
+      <section class="local-audio-eq" aria-label="Equalizer tiga band"><div class="local-audio-section-title"><h3>Equalizer</h3><span>Untuk file lokal</span></div><div class="local-eq-grid">
+        <label>Bass <output id="local-eq-bass-value">0 dB</output><input id="local-eq-bass" type="range" min="-12" max="12" value="0" step="1" /></label>
+        <label>Mid <output id="local-eq-mid-value">0 dB</output><input id="local-eq-mid" type="range" min="-12" max="12" value="0" step="1" /></label>
+        <label>Treble <output id="local-eq-treble-value">0 dB</output><input id="local-eq-treble" type="range" min="-12" max="12" value="0" step="1" /></label>
+      </div></section>
+      <p class="local-audio-note">File yang disimpan menggunakan IndexedDB dan tetap berada di browser/perangkat ini, selama data aplikasi tidak dihapus. Visualizer dan equalizer menganalisis file lokal; audio YouTube IFrame tidak dapat dianalisis langsung karena batasan keamanan lintas-origin.</p>
     </section>
   </div>
 

@@ -2083,3 +2083,37 @@ body.lyrics-focus #nowplaying .lyrics-toolbar { padding-top:8px; }
 #local-audio-element { display:block; width:100%; height:44px; }
 .local-audio-note { margin-top:14px; color:#858585; font-size:11px; line-height:1.55; }
 @media (max-width:600px) { .local-audio-lab { padding:8px; } .local-audio-window { padding:16px; border-radius:16px; } #local-audio-spectrum { aspect-ratio:2.1/1; } }
+
+/* Offline library + 3-band EQ: AMOLED surfaces, restrained accent and touch targets. */
+.local-audio-actions { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:0 0 16px; }
+.local-audio-actions #local-audio-status { color:var(--muted,#aaa); font-size:12px; line-height:1.5; flex:1 1 240px; }
+.local-audio-actions #local-audio-status.is-error,
+.local-audio-empty.is-error { color:#ff8c8c; }
+.local-audio-library-section,.local-audio-eq { margin-top:22px; padding-top:18px; border-top:1px solid #242424; }
+.local-audio-section-title { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+.local-audio-section-title h3 { margin:0; font-size:15px; letter-spacing:-.02em; }
+.local-audio-section-title span { color:#777; font-size:11px; }
+.local-audio-empty { margin:0; padding:16px; border:1px dashed #303030; border-radius:12px; color:#858585; font-size:12px; }
+.local-audio-track { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid #1c1c1c; }
+.local-audio-track:last-child { border-bottom:0; }
+.local-audio-track-meta { min-width:0; display:flex; flex-direction:column; gap:5px; }
+.local-audio-track-meta strong { overflow-wrap:anywhere; font-size:13px; font-weight:650; }
+.local-audio-track-meta span { color:#858585; font-size:11px; }
+.local-audio-track-actions { display:flex; gap:8px; flex-shrink:0; }
+.local-audio-track-actions .pill-btn { min-height:36px; padding:8px 12px; font-size:12px; }
+.local-audio-track-actions .local-audio-remove { color:#ffaaaa; }
+.local-audio-eq .local-eq-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.local-eq-grid label { display:flex; flex-direction:column; gap:9px; color:#ddd; font-size:12px; font-weight:650; }
+.local-eq-grid output { color:var(--accent-bright,#1ed760); font-variant-numeric:tabular-nums; font-weight:500; }
+.local-eq-grid input[type=range] { width:100%; accent-color:var(--accent-bright,#1ed760); }
+#local-audio-save:disabled { opacity:.58; cursor:not-allowed; }
+@media (max-width:600px) {
+  .local-audio-track { align-items:flex-start; flex-direction:column; }
+  .local-audio-track-actions { width:100%; }
+  .local-audio-track-actions .pill-btn { flex:1; justify-content:center; }
+  .local-audio-eq .local-eq-grid { gap:10px; }
+  .local-eq-grid label { font-size:11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .local-audio-track, .local-audio-track-actions .pill-btn { transition:none !important; }
+}

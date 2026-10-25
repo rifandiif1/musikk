@@ -2,6 +2,11 @@
   "appId": "com.richmusic.app",
   "appName": "Rich Music",
   "webDir": "public",
+  "server": {
+    "url": "https://musikk-delta.vercel.app",
+    "cleartext": false,
+    "allowNavigation": ["musikk-delta.vercel.app"]
+  },
   "android": {
     "allowMixedContent": false
   }

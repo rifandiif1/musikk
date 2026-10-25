@@ -2519,6 +2519,7 @@ function openSleepTimer() {
     if (m > 0) {
       Player.sleepTimer = setTimeout(() => {
         Player.yt && Player.yt.pauseVideo();
+        if (typeof window.RichLocalAudioPause === 'function') window.RichLocalAudioPause();
         Player.sleepTimer = null;
         $('#np-sleep') && $('#np-sleep').classList.remove('on');
         toast('Sleep timer: paused');
@@ -3407,42 +3408,142 @@ function handlePlayerOrientation() {
 window.addEventListener('orientationchange', () => setTimeout(handlePlayerOrientation, 180));
 window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._timer); handlePlayerOrientation._timer = setTimeout(handlePlayerOrientation, 180); });
 
-/* ================= local offline audio + real Web Audio spectrum ================= */
+/* ================= local offline audio library + EQ + real Web Audio spectrum ================= */
 (() => {
   const modal = $('#local-audio-lab');
   const input = $('#local-audio-file');
   const audio = $('#local-audio-element');
   const canvas = $('#local-audio-spectrum');
   const name = $('#local-audio-name');
+  const saveBtn = $('#local-audio-save');
+  const status = $('#local-audio-status');
+  const libraryEl = $('#local-audio-library');
   if (!modal || !input || !audio || !canvas) return;
-  let objectUrl = null, audioCtx = null, analyser = null, source = null, raf = 0, bins = null;
+
+  const DB_NAME = 'rich-music-local-library';
+  const DB_VERSION = 1;
+  let dbPromise = null;
+  let currentFile = null;
+  let currentTrackId = null;
+  let objectUrl = null;
+  let audioCtx = null, analyser = null, source = null, raf = 0, bins = null;
+  let bassFilter = null, midFilter = null, trebleFilter = null;
   const ctx = canvas.getContext('2d');
-  function open() { modal.classList.remove('hidden'); if (!raf) draw(); }
-  function close() { modal.classList.add('hidden'); if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+
+  function openDb() {
+    if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB tidak didukung'));
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains('tracks')) {
+          const store = db.createObjectStore('tracks', { keyPath: 'id' });
+          store.createIndex('addedAt', 'addedAt', { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => { dbPromise = null; reject(request.error || new Error('Database gagal dibuka')); };
+      request.onblocked = () => { status && (status.textContent = 'Tutup tab Rich Music lain untuk memperbarui pustaka offline.'); };
+    });
+    return dbPromise;
+  }
+  async function dbRequest(mode, action) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('tracks', mode);
+      const req = action(tx.objectStore('tracks'));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('Operasi pustaka gagal'));
+      tx.onabort = () => reject(tx.error || new Error('Transaksi pustaka dibatalkan'));
+    });
+  }
+  function humanSize(bytes) {
+    if (!Number.isFinite(bytes) || bytes < 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes, index = 0;
+    while (value >= 1024 && index < units.length - 1) { value /= 1024; index++; }
+    return `${value.toFixed(index ? 1 : 0)} ${units[index]}`;
+  }
+  function showStatus(message, isError = false) {
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle('is-error', isError);
+  }
+  function setAudioFile(file, trackId = null) {
+    if (!file) return;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    currentFile = file;
+    currentTrackId = trackId;
+    objectUrl = URL.createObjectURL(file);
+    audio.src = objectUrl;
+    audio.load();
+    name.textContent = `${file.name} · ${humanSize(file.size)} · lokal/offline`;
+    if (saveBtn) { saveBtn.disabled = !!trackId; saveBtn.textContent = trackId ? 'Tersimpan offline' : 'Simpan ke pustaka offline'; }
+    showStatus(trackId ? 'Lagu diputar dari pustaka offline.' : 'File dipilih. Simpan ke pustaka agar tetap tersedia setelah halaman dibuka kembali.');
+  }
+  function open() {
+    modal.classList.remove('hidden');
+    if (!raf) draw();
+    renderLibrary();
+  }
+  function close() {
+    modal.classList.add('hidden');
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    // Playback intentionally continues when the panel is closed.
+  }
   $('#local-audio-open')?.addEventListener('click', open);
   $('#local-audio-close')?.addEventListener('click', close);
   modal.querySelectorAll('[data-close-local-audio]').forEach((el) => el.addEventListener('click', close));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) close(); });
+
   async function ensureAnalyser() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     if (!source) {
       source = audioCtx.createMediaElementSource(audio);
+      bassFilter = audioCtx.createBiquadFilter(); bassFilter.type = 'lowshelf'; bassFilter.frequency.value = 100;
+      midFilter = audioCtx.createBiquadFilter(); midFilter.type = 'peaking'; midFilter.frequency.value = 1000; midFilter.Q.value = 0.8;
+      trebleFilter = audioCtx.createBiquadFilter(); trebleFilter.type = 'highshelf'; trebleFilter.frequency.value = 8000;
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 1024;
       analyser.smoothingTimeConstant = 0.78;
-      source.connect(analyser);
-      analyser.connect(audioCtx.destination);
+      source.connect(bassFilter); bassFilter.connect(midFilter); midFilter.connect(trebleFilter);
+      trebleFilter.connect(analyser); analyser.connect(audioCtx.destination);
       bins = new Uint8Array(analyser.frequencyBinCount);
+      applyEq();
     }
-    if (!raf) draw();
+    if (!raf && !modal.classList.contains('hidden')) draw();
+  }
+  function applyEq() {
+    const specs = [
+      ['local-eq-bass', 'local-eq-bass-value', bassFilter],
+      ['local-eq-mid', 'local-eq-mid-value', midFilter],
+      ['local-eq-treble', 'local-eq-treble-value', trebleFilter],
+    ];
+    for (const [inputId, outputId, filter] of specs) {
+      const slider = $(`#${inputId}`), output = $(`#${outputId}`);
+      if (!slider) continue;
+      const stored = localStorage.getItem(`rm_${inputId}`);
+      if (stored !== null && slider.dataset.loaded !== '1') slider.value = String(Math.max(-12, Math.min(12, Number(stored) || 0)));
+      slider.dataset.loaded = '1';
+      if (filter) filter.gain.value = Number(slider.value) || 0;
+      if (output) output.textContent = `${Number(slider.value) || 0} dB`;
+    }
+  }
+  for (const id of ['local-eq-bass', 'local-eq-mid', 'local-eq-treble']) {
+    $(`#${id}`)?.addEventListener('input', () => {
+      const slider = $(`#${id}`);
+      try { localStorage.setItem(`rm_${id}`, slider.value); } catch {}
+      applyEq();
+    });
   }
   function draw() {
     if (modal.classList.contains('hidden')) { raf = 0; return; }
     raf = requestAnimationFrame(draw);
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#080a09'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, w, h);
     if (!analyser || audio.paused) {
       ctx.fillStyle = 'rgba(255,255,255,.38)'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText(audio.src ? 'Tekan Play untuk spectrum real-time' : 'Pilih file audio untuk memulai', w / 2, h / 2);
@@ -3459,23 +3560,88 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
       ctx.beginPath();
       const x = i * (barW + gap), y = h - bh;
       const r = Math.min(4, barW / 2);
-      ctx.roundRect(x, y, barW, bh, r); ctx.fill();
+      if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, barW, bh, r); else ctx.rect(x, y, barW, bh);
+      ctx.fill();
     }
   }
+  async function renderLibrary() {
+    if (!libraryEl) return;
+    libraryEl.replaceChildren();
+    try {
+      const tracks = (await dbRequest('readonly', store => store.getAll())).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+      if (!tracks.length) {
+        const empty = document.createElement('p'); empty.className = 'local-audio-empty'; empty.textContent = 'Belum ada lagu tersimpan.'; libraryEl.append(empty); return;
+      }
+      for (const track of tracks) {
+        const row = document.createElement('div'); row.className = 'local-audio-track';
+        const meta = document.createElement('div'); meta.className = 'local-audio-track-meta';
+        const title = document.createElement('strong'); title.textContent = track.name || 'Audio tanpa judul';
+        const detail = document.createElement('span'); detail.textContent = `${humanSize(track.size || (track.blob && track.blob.size) || 0)} · tersimpan offline`;
+        meta.append(title, detail);
+        const actions = document.createElement('div'); actions.className = 'local-audio-track-actions';
+        const play = document.createElement('button'); play.type = 'button'; play.className = 'pill-btn'; play.textContent = 'Putar'; play.dataset.audioPlay = track.id; play.setAttribute('aria-label', `Putar ${track.name || 'audio'}`);
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'pill-btn local-audio-remove'; remove.textContent = 'Hapus'; remove.dataset.audioDelete = track.id; remove.setAttribute('aria-label', `Hapus ${track.name || 'audio'}`);
+        actions.append(play, remove); row.append(meta, actions); libraryEl.append(row);
+      }
+    } catch (error) {
+      const message = document.createElement('p'); message.className = 'local-audio-empty is-error';
+      message.textContent = 'Pustaka offline tidak dapat dibuka. Browser mungkin membatasi penyimpanan lokal.';
+      libraryEl.append(message); showStatus(error.message || 'Database offline tidak tersedia.', true);
+    }
+  }
+  saveBtn?.addEventListener('click', async () => {
+    if (!currentFile || currentTrackId) return;
+    saveBtn.disabled = true;
+    showStatus('Menyimpan file ke pustaka offline…');
+    try {
+      const id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `track_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      await dbRequest('readwrite', store => store.put({ id, name: currentFile.name, type: currentFile.type || 'audio/mpeg', size: currentFile.size, addedAt: Date.now(), blob: currentFile }));
+      currentTrackId = id;
+      showStatus('Berhasil disimpan. Lagu tersedia offline di browser/perangkat ini.');
+      saveBtn.textContent = 'Tersimpan offline';
+      await renderLibrary();
+    } catch (error) {
+      showStatus('Gagal menyimpan. Periksa ruang penyimpanan browser/perangkat.', true);
+      saveBtn.disabled = false;
+      toast('Gagal menyimpan lagu offline');
+    }
+  });
+  libraryEl?.addEventListener('click', async (event) => {
+    const playBtn = event.target.closest('[data-audio-play]');
+    const deleteBtn = event.target.closest('[data-audio-delete]');
+    try {
+      if (playBtn) {
+        const track = await dbRequest('readonly', store => store.get(playBtn.dataset.audioPlay));
+        if (!track || !track.blob) throw new Error('File tidak ditemukan');
+        setAudioFile(new File([track.blob], track.name, { type: track.type || track.blob.type || 'audio/mpeg', lastModified: track.addedAt || Date.now() }), track.id);
+        await audio.play();
+      } else if (deleteBtn) {
+        await dbRequest('readwrite', store => store.delete(deleteBtn.dataset.audioDelete));
+        if (currentTrackId === deleteBtn.dataset.audioDelete) { currentTrackId = null; currentFile = null; audio.pause(); audio.removeAttribute('src'); audio.load(); if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = null; name.textContent = 'Lagu dihapus dari pustaka'; if (saveBtn) saveBtn.disabled = true; }
+        showStatus('Lagu dihapus dari pustaka offline.');
+        await renderLibrary();
+      }
+    } catch (error) { showStatus(error.message || 'Operasi pustaka gagal.', true); toast('Tidak dapat memproses lagu offline'); }
+  });
   input.addEventListener('change', async () => {
     const file = input.files && input.files[0];
     if (!file) return;
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    objectUrl = URL.createObjectURL(file);
-    audio.src = objectUrl;
-    audio.load();
-    name.textContent = `${file.name} · ${(file.size / 1048576).toFixed(1)} MB · lokal/offline`;
-    try { await ensureAnalyser(); } catch { toast('Audio analyzer tidak didukung browser ini'); }
+    setAudioFile(file);
+    try { await ensureAnalyser(); } catch { showStatus('Audio analyzer tidak didukung browser ini.', true); toast('Audio analyzer tidak didukung browser ini'); }
   });
-  audio.addEventListener('play', () => ensureAnalyser().then(() => { if (!raf && !modal.classList.contains('hidden')) draw(); }).catch(() => {}));
-  audio.addEventListener('ended', () => { if (name) name.textContent += ' · selesai'; });
+  audio.addEventListener('play', () => {
+    // Avoid two audio sources playing over each other in the same session.
+    try { if (Player.yt && Player.ready && typeof Player.yt.pauseVideo === 'function') Player.yt.pauseVideo(); } catch {}
+    ensureAnalyser().then(() => { if (!raf && !modal.classList.contains('hidden')) draw(); }).catch(() => {});
+  });
+  audio.addEventListener('ended', () => { if (name) name.textContent = `${currentFile ? currentFile.name : 'Audio'} · selesai`; });
+  audio.addEventListener('error', () => showStatus('File audio tidak dapat diputar oleh browser ini.', true));
+  window.RichLocalAudioPause = () => audio.pause();
+  window.RichLocalAudioIsPlaying = () => !audio.paused;
+  applyEq();
+  renderLibrary();
   draw();
-  window.addEventListener('pagehide', () => { cancelAnimationFrame(raf); if (objectUrl) URL.revokeObjectURL(objectUrl); });
+  window.addEventListener('pagehide', () => { if (raf) cancelAnimationFrame(raf); if (objectUrl) URL.revokeObjectURL(objectUrl); if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {}); });
 })();
 
 /* ================= lyrics studio: providers, manual import, editor and styling ================= */
