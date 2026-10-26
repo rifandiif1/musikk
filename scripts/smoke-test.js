@@ -34,7 +34,7 @@ assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause lo
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
 assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
-assert.match(sw, /rich-music-shell-v29/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v31/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -53,13 +53,20 @@ assert.match(nativeScript, /onGetSession\(/, 'system media clients must be able 
 assert.match(nativeScript, /media3-exoplayer:1\.8\.0/, 'generated Android project must include Media3 ExoPlayer');
 assert.match(nativeScript, /media3-session:1\.8\.0/, 'generated Android project must include Media3 session');
 assert.match(nativeScript, /ACTION_SEEK/, 'native playback should support seeking');
+assert.match(nativeScript, /ACTION_PLAY_QUEUE/, 'native playback should accept a playlist queue');
+assert.match(nativeScript, /player\.setMediaItems\(items, 0, 0L\)/, 'native playlist should expose next/previous media-session controls');
+assert.match(nativeScript, /EXTRA_ALLOW_MULTIPLE/, 'native picker should allow multiple local audio files');
+assert.match(app, /bridge\.playQueue\(\{ itemsJson: JSON\.stringify\(nativeItems\) \}\)/, 'native picker should pass selected tracks as a queue');
 assert.match(nativeScript, /import androidx\.activity\.result\.ActivityResult;/, 'Capacitor activity callback should use AndroidX ActivityResult');
 assert.doesNotMatch(nativeScript, /import com\.getcapacitor\.ActivityResult;/, 'invalid Capacitor ActivityResult import must not return');
 assert.match(nativeScript, /FOREGROUND_SERVICE_MEDIA_PLAYBACK/, 'native player should use media-playback foreground service type');
 assert.match(nativeScript, /POST_NOTIFICATIONS/, 'Android 13+ notification permission should be declared and requested');
-assert.match(app, /syncAndroidBackgroundPlayback/, 'YouTube background limitation should be documented in playback bridge');
+assert.match(app, /YouTube IFrame cannot be bridged into ExoPlayer/, 'YouTube IFrame background limitation should be explicit');
+assert.match(app, /https:\/\/archive\.org\/advancedsearch\.php/, 'online archive audio search should be wired');
+assert.match(app, /bridge\.playQueue\(\{ itemsJson: JSON\.stringify\(resolved\) \}\)/, 'online archive tracks should use the native background queue');
+assert.match(html, /id=\"online-audio-search-form\"/, 'online audio search UI should exist');
 assert.match(app, /bridge\?\.pickAudio/, 'Android local file picker should be wired');
-assert.match(app, /playLocal\(\{ uri: picked\.uri/, 'native local audio should pass the selected content URI to the service');
+assert.match(app, /bridge\.playQueue\(\{ itemsJson: JSON\.stringify\(nativeItems\) \}\)/, 'native local audio should pass selected content URIs to the service');
 assert.match(app, /seekLocal\?\.\(\{ position:/, 'native audio timeline should send seek positions to Android');
 assert.match(html, /id="android-native-audio"/, 'native background player controls should exist');
 for (const id of ['android-audio-pick', 'android-audio-pause', 'android-audio-resume', 'android-audio-stop', 'android-audio-status', 'android-audio-seek', 'android-audio-position', 'android-audio-duration']) assert.match(html, new RegExp(`id="${id}"`), `native player control ${id} should exist`);

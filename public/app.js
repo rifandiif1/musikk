@@ -47,12 +47,11 @@ function applyTint(key) {
 }
 function currentTheme() { return 'dark'; }
 
-// YouTube IFrame audio is web-owned and cannot be made reliably background-capable by
-// keeping a foreground service alive. The native service is reserved for Android-picked
-// local files, where MediaPlayer + MediaSession can own the audio lifecycle.
-function syncAndroidBackgroundPlayback(_playing) {
-  // Intentionally no-op for YouTube IFrame playback; see Android Background Player in Local Audio Lab.
-}
+// YouTube IFrame playback remains owned by the embedded YouTube player. Media3 cannot
+// take over that stream; the native service is for Android-picked local files and authorized
+// direct audio URLs. Do not report YouTube as background-capable unless a supported native
+// streaming source is integrated.
+function syncAndroidBackgroundPlayback(_playing) { /* YouTube IFrame cannot be bridged into ExoPlayer. */ }
 
 // Mark the native wrapper so Android safe-area rules can be applied without changing the PWA.
 try {
@@ -3495,6 +3494,10 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
   const nativeSeek = $('#android-audio-seek');
   const nativePosition = $('#android-audio-position');
   const nativeDuration = $('#android-audio-duration');
+  const onlineSearchForm = $('#online-audio-search-form');
+  const onlineQuery = $('#online-audio-query');
+  const onlineStatus = $('#online-audio-status');
+  const onlineResults = $('#online-audio-results');
   let nativeSeeking = false;
   const isNativeAndroid = () => { try { return !!window.Capacitor?.isNativePlatform?.() && window.Capacitor?.getPlatform?.() === 'android'; } catch { return false; } };
   const nativeBridge = () => window.Capacitor?.Plugins?.BackgroundAudio;
@@ -3521,6 +3524,102 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
       if (nativeDuration) nativeDuration.textContent = fmtTime(duration / 1000);
     } catch { /* Older APKs may not have the native bridge yet. */ }
   }
+  function setOnlineStatus(message, error = false) {
+    if (!onlineStatus) return;
+    onlineStatus.textContent = message;
+    onlineStatus.classList.toggle('is-error', error);
+  }
+  function archiveAudioUrl(identifier, fileName) {
+    return `https://archive.org/download/${encodeURIComponent(identifier)}/${fileName.split('/').map(encodeURIComponent).join('/')}`;
+  }
+  async function resolveArchiveItem(identifier) {
+    const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`);
+    if (!response.ok) throw new Error(`Metadata audio gagal (${response.status})`);
+    const data = await response.json();
+    const files = (data.files || []).filter(file => {
+      const name = String(file.name || '').toLowerCase();
+      const format = String(file.format || '').toLowerCase();
+      return !name.includes('/') && !name.endsWith('.xml') && !name.endsWith('.torrent') &&
+        (/\.(mp3|m4a|aac|ogg|oga|opus|flac|wav)$/i.test(name) || /mp3|ogg vorbis|flac|wave|aac/.test(format));
+    }).sort((a,b) => {
+      const score = f => {
+        const n = String(f.name || '').toLowerCase();
+        const fmt = String(f.format || '').toLowerCase();
+        return (n.endsWith('.mp3') ? 0 : 10) + (/vbr|256|320/.test(n) ? -2 : 0) + (/mp3/.test(fmt) ? 0 : 3);
+      };
+      return score(a) - score(b);
+    });
+    const file = files[0];
+    if (!file) throw new Error('Tidak ditemukan file audio yang bisa diputar untuk rekaman ini.');
+    const meta = data.metadata || {};
+    const first = v => Array.isArray(v) ? (v[0] || '') : (v || '');
+    const title = first(meta.title) || identifier;
+    const artist = first(meta.creator) || first(meta.artist) || 'Internet Archive';
+    return { uri: archiveAudioUrl(identifier, file.name), title: String(title), artist: String(artist), identifier };
+  }
+  async function searchArchiveAudio(query) {
+    const params = new URLSearchParams({ q: `(${query}) AND mediatype:audio`, fl: 'identifier,title,creator', rows: '12', page: '1', output: 'json' });
+    const response = await fetch(`https://archive.org/advancedsearch.php?${params.toString()}`);
+    if (!response.ok) throw new Error(`Pencarian online gagal (${response.status})`);
+    const data = await response.json();
+    return (data.response?.docs || []).filter(x => x.identifier).slice(0, 12);
+  }
+  async function playArchiveResult(identifier, button) {
+    const bridge = nativeBridge();
+    button.disabled = true;
+    try {
+      setOnlineStatus('Memeriksa file audio dan menyiapkan pemutar…');
+      const docs = await searchArchiveAudio(onlineQuery?.value?.trim() || identifier);
+      const orderedIds = [identifier, ...docs.map(x => x.identifier).filter(x => x !== identifier)].slice(0, 12);
+      const resolved = [];
+      for (const id of orderedIds) {
+        try { resolved.push(await resolveArchiveItem(id)); } catch (err) { if (id === identifier) throw err; }
+        if (resolved.length >= 8) break;
+      }
+      if (!resolved.length) throw new Error('Tidak ada file audio langsung yang dapat diputar.');
+      if (isNativeAndroid() && bridge?.playQueue) {
+        await bridge.playQueue({ itemsJson: JSON.stringify(resolved) });
+        setOnlineStatus(`Memutar online: ${resolved[0].title}. Pemutar native aktif; bisa diminimalkan dan dikunci.`);
+        await refreshNativeState();
+      } else if (audio) {
+        audio.src = resolved[0].uri;
+        audio.dataset.onlineSource = 'archive';
+        audio.load();
+        await audio.play();
+        if (name) name.textContent = `${resolved[0].title} — ${resolved[0].artist}`;
+        setOnlineStatus('Memutar audio online di pemutar web. Background yang andal memerlukan APK Android dengan pemutar native.');
+      }
+    } catch (error) {
+      setOnlineStatus(error?.message || 'Gagal memutar audio online.', true);
+    } finally { button.disabled = false; }
+  }
+  onlineSearchForm?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const query = onlineQuery?.value?.trim();
+    if (!query) return;
+    onlineResults.replaceChildren();
+    setOnlineStatus('Mencari rekaman audio online…');
+    const searchButton = onlineSearchForm.querySelector('button[type="submit"]');
+    if (searchButton) searchButton.disabled = true;
+    try {
+      const docs = await searchArchiveAudio(query);
+      if (!docs.length) { setOnlineStatus('Tidak ada hasil. Coba kata kunci lain.'); return; }
+      setOnlineStatus(`${docs.length} rekaman ditemukan. Tekan Putar untuk memulai antrean native.`);
+      for (const doc of docs) {
+        const row = document.createElement('div');
+        row.className = 'online-audio-result';
+        const meta = document.createElement('div');
+        const title = document.createElement('strong'); title.textContent = doc.title || doc.identifier;
+        const artist = document.createElement('span'); artist.textContent = doc.creator || 'Internet Archive';
+        meta.append(title, artist);
+        const play = document.createElement('button'); play.type = 'button'; play.className = 'pill-btn'; play.textContent = 'Putar';
+        play.addEventListener('click', () => playArchiveResult(doc.identifier, play));
+        row.append(meta, play); onlineResults.append(row);
+      }
+    } catch (error) { setOnlineStatus(error?.message || 'Pencarian online gagal. Periksa koneksi internet.', true); }
+    finally { if (searchButton) searchButton.disabled = false; }
+  });
+
   nativePick?.addEventListener('click', async () => {
     const bridge = nativeBridge();
     if (!isNativeAndroid() || !bridge?.pickAudio || !bridge?.playLocal) {
@@ -3530,9 +3629,19 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
     try {
       const picked = await bridge.pickAudio();
       nativeSelected = picked;
-      nativeMessage(`Menyiapkan ${picked.name || 'audio lokal'}…`);
-      await bridge.playLocal({ uri: picked.uri, title: picked.name || 'Audio lokal', artist: 'File lokal · Android' });
-      nativeMessage(`Memulai ${picked.name || 'audio lokal'}. Pemutaran native dapat terus berjalan ketika aplikasi diminimalkan.`);
+      const pickedItems = Array.isArray(picked.items) && picked.items.length
+        ? picked.items
+        : [{ uri: picked.uri, name: picked.name || 'Audio lokal' }];
+      const nativeItems = pickedItems.map((item, index) => ({
+        uri: item.uri,
+        title: item.name || `Audio lokal ${index + 1}`,
+        artist: 'File lokal · Android'
+      })).filter(item => item.uri);
+      if (!nativeItems.length) throw new Error('Tidak ada file audio yang dapat dibuka.');
+      nativeMessage(`Menyiapkan ${nativeItems.length} file audio…`);
+      if (bridge.playQueue) await bridge.playQueue({ itemsJson: JSON.stringify(nativeItems) });
+      else await bridge.playLocal({ uri: nativeItems[0].uri, title: nativeItems[0].title, artist: nativeItems[0].artist });
+      nativeMessage(`Memulai antrean ${nativeItems.length} file. Kontrol media tersedia selama pemutar native aktif.`);
       await refreshNativeState();
     } catch (error) {
       nativeMessage(error?.message || 'Tidak dapat membuka audio native. Pastikan file audio dapat diakses.', true);

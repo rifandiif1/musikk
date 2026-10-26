@@ -1,3 +1,5 @@
+> Versi terbaru adalah [README-v9.3.md](README-v9.3.md). Versi 9.3 menambahkan playlist file lokal native dan memperbarui status validasi. Batasan YouTube IFrame tetap berlaku.
+
 # Rich Music Premium v9.2 — Background Playback Repair
 
 ## Apa yang berubah

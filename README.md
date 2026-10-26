@@ -1,29 +1,35 @@
-# Rich Music Premium v9.2 — Background Playback Repair
+## v9.4 Online + Offline Background Playback
+See `README-v9.4.md` for online Internet Archive audio search, native Media3 queue integration, limitations, and validation notes.
 
-## Apa yang berubah
+# RichMusic v9.3 — Native background playback queue
 
-- Pemutar audio native lokal dipindahkan ke **AndroidX Media3 ExoPlayer + MediaSessionService**. Service terpisah dari Activity/WebView dan bertanggung jawab atas audio serta sesi media.
-- Notifikasi media dihasilkan oleh `MediaSessionService` berdasarkan status player sebenarnya, termasuk metadata lagu dan kontrol sistem; tidak lagi membuat notifikasi manual yang dapat terlepas dari player.
-- Plugin native tetap menyediakan pilih file, play/pause/resume/stop, status dan seek.
-- Ditambahkan metode native `playUrl` untuk **URL audio HTTP(S) langsung** yang memang dapat diakses sebagai media. Tautan halaman web dan ID/URL halaman YouTube bukan URL audio langsung.
-- Manifest menyatakan `mediaPlayback` foreground service dan permission yang relevan. Dependensi Media3 ditambahkan oleh generator saat workflow membuat proyek Android.
-- Cache service worker dinaikkan ke `rich-music-shell-v29`.
+## Perubahan v9.3
 
-## Cara menguji pemutar lokal
+- Android Background Player sekarang dapat memilih **beberapa file audio lokal sekaligus**.
+- File yang dipilih dikirim sebagai playlist ke AndroidX Media3 ExoPlayer di dalam `MediaSessionService`, bukan diputar dari WebView.
+- Metadata judul/artis diperbarui saat item playlist berganti. Kontrol media sistem memanfaatkan playlist native untuk previous/next serta play/pause.
+- Dukungan seek, status pemutar, stop, dan pemutaran URL audio HTTP(S) langsung yang sah/diizinkan tetap tersedia.
+- Cache PWA dinaikkan ke `rich-music-shell-v30`.
+
+## Menguji pemutaran lokal
 
 1. Ganti source repo dengan isi ZIP ini.
-2. Jalankan GitHub Actions → **Build Android APK** dan pastikan job `Build debug APK` benar-benar berstatus sukses.
-3. Unduh artifact `rich-music-android-debug` dari run yang sama, instal APK itu, lalu izinkan notifikasi jika Android memintanya.
-4. Buka **Local Audio Lab → Android Background Player → Pilih & putar file**.
-5. Pastikan audio terdengar, kartu media muncul di panel notifikasi/Quick Settings, dan tombol pause/resume/stop berfungsi.
-6. Pindah ke Home atau kunci layar; audio lokal harus tetap berjalan. Uji juga dengan menutup aplikasi dari Recent Apps.
-7. Jika gagal, simpan logcat dari proses `com.richmusic.app` dan hasil Gradle build. Jangan menguji APK lama dari run sebelumnya.
+2. Jalankan GitHub Actions → **Build Android APK**; pastikan `Build debug APK` sukses.
+3. Unduh artifact `rich-music-android-debug` dari run tersebut dan instal APK hasil build terbaru.
+4. Izinkan notifikasi jika diminta, lalu buka **Local Audio Lab → Android Background Player → Pilih & putar file**.
+5. Pilih satu atau beberapa file. Pastikan audio terdengar dan kartu media muncul pada panel notifikasi/Quick Settings.
+6. Uji play/pause, next/previous (jika antrean memiliki track yang sesuai), minimize, lalu kunci layar.
 
-## Batasan penting untuk pemutaran online
+## Batasan YouTube online yang tidak boleh disamarkan
 
-Player utama RichMusic menggunakan **YouTube IFrame Player API**. Audio itu dimiliki WebView/YouTube, bukan oleh ExoPlayer native. Service foreground tidak bisa mengambil alih stream audio dari iframe, sehingga menambahkan notifikasi saja tidak dapat membuat pemutaran YouTube tetap berjalan secara andal setelah aplikasi ditutup. Metode `playUrl` hanya mendukung URL media langsung yang sah/diizinkan oleh penyedianya; ia tidak mengubah URL video YouTube menjadi stream audio. Untuk background playback pada katalog online, sumber streaming harus menyediakan URL audio yang boleh diputar di aplikasi atau integrasi resmi yang mendukung background playback.
+Pemutar katalog utama tetap memakai **YouTube IFrame Player API**. Audio tersebut dimiliki oleh player YouTube di WebView, bukan Media3. Android MediaSession/foreground service tidak dapat mengambil alih stream dari iframe, dan membuat notifikasi palsu saja tidak akan menjaga audio iframe tetap berjalan saat layar dikunci atau Activity/WebView dihentikan. Karena itu, versi ini **belum menjamin background playback untuk trek YouTube yang dimainkan melalui IFrame**.
 
-## Status validasi
+Agar online background playback benar-benar didukung, aplikasi perlu menggunakan URL audio langsung yang memang boleh diputar oleh aplikasi atau integrasi streaming resmi yang menyediakan hak/fitur background playback. Plugin `BackgroundAudio.playUrl` menerima URL media langsung HTTP(S), bukan URL halaman YouTube atau ID video. Tidak ada klaim bahwa URL YouTube bisa diubah menjadi stream native.
 
-- Source test dan generator script dapat diperiksa secara lokal.
-- **Build Gradle dan pengujian perangkat belum diverifikasi di lingkungan pembuatan ZIP ini.** Jangan anggap APK berhasil sebelum workflow GitHub Actions menyelesaikan `assembleDebug` dan APK diuji pada perangkat.
+## Validasi yang dilakukan untuk source ini
+
+- `npm test` — lulus (pemeriksaan sintaks JavaScript dan smoke tests).
+- `bash -n scripts/install-android-background.sh` — lulus.
+- Fixture generator Android — lulus: service/plugin Java, dependency Media3, permission, manifest, dan queue berhasil dibuat.
+- Integritas ZIP — harus diperiksa setelah arsip dibuat.
+- **Gradle `assembleDebug`, kompilasi Java Android sesungguhnya, notifikasi di perangkat, serta playback saat layar terkunci belum diuji di lingkungan ini.** Build APK dan uji perangkat tetap diperlukan; jangan menganggap keberhasilan source test sebagai bukti APK berjalan.

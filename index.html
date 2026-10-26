@@ -318,9 +318,16 @@ try {
   <div id="local-audio-lab" class="local-audio-lab hidden" role="dialog" aria-modal="true" aria-labelledby="local-audio-title">
     <div class="local-audio-backdrop" data-close-local-audio></div>
     <section class="local-audio-window">
-      <header><div><p class="lyrics-studio-eyebrow">RICH MUSIC / OFFLINE</p><h2 id="local-audio-title">Local Audio Lab</h2><p>Pilih file audio yang tersimpan di perangkat. Pemutaran offline dan spectrum analyzer bekerja untuk file lokal.</p></div><button type="button" id="local-audio-close" class="icon-btn" aria-label="Tutup Local Audio Lab">✕</button></header>
+      <header><div><p class="lyrics-studio-eyebrow">RICH MUSIC / AUDIO LAB</p><h2 id="local-audio-title">Local Audio Lab</h2><p>Putar file lokal secara offline atau cari audio online yang menyediakan file streaming langsung.</p></div><button type="button" id="local-audio-close" class="icon-btn" aria-label="Tutup Local Audio Lab">✕</button></header>
       <label class="local-audio-pick">Pilih file audio <input id="local-audio-file" type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.flac" /></label>
       <div class="local-audio-actions"><button type="button" id="local-audio-save" class="pill-btn primary" disabled>Simpan ke pustaka offline</button><span id="local-audio-status" role="status" aria-live="polite">File yang disimpan tersedia setelah halaman dibuka kembali di browser yang sama.</span></div>
+      <section class="online-audio-search" aria-label="Cari audio online untuk background">
+        <div class="local-audio-section-title"><h3>Musik online · Background</h3><span>Internet Archive</span></div>
+        <p class="online-audio-help">Cari rekaman audio yang tersedia untuk streaming langsung. Pada APK Android, lagu diputar oleh pemutar native sehingga bisa lanjut saat aplikasi diminimalkan atau layar dikunci. Katalog ini tidak mencakup semua lagu komersial.</p>
+        <form id="online-audio-search-form" class="online-audio-search-form"><input id="online-audio-query" type="search" placeholder="Cari artis, judul, atau rekaman audio…" autocomplete="off" aria-label="Cari audio online" required /><button type="submit" class="pill-btn primary">Cari online</button></form>
+        <p id="online-audio-status" role="status" aria-live="polite">Masukkan kata kunci untuk mencari audio online.</p>
+        <div id="online-audio-results" class="online-audio-results"></div>
+      </section>
       <section id="android-native-audio" class="android-native-audio" aria-label="Pemutar audio native Android">
         <div class="android-native-audio-head"><div><strong>Android Background Player</strong><span>Putar file audio perangkat lewat pemutar native; dapat berlanjut saat aplikasi diminimalkan.</span></div><span class="native-audio-badge">NATIVE</span></div>
         <div class="android-native-audio-controls"><button type="button" id="android-audio-pick" class="pill-btn primary"><svg class="ic"><use href="#i-audio"/></svg> Pilih & putar file</button><button type="button" id="android-audio-pause" class="pill-btn"><svg class="ic"><use href="#i-pause"/></svg> Jeda</button><button type="button" id="android-audio-resume" class="pill-btn"><svg class="ic"><use href="#i-play"/></svg> Lanjutkan</button><button type="button" id="android-audio-stop" class="pill-btn"><svg class="ic"><use href="#i-x"/></svg> Berhenti</button></div>

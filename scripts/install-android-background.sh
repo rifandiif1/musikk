@@ -13,6 +13,9 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.JSArray;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -27,6 +30,7 @@ public class BackgroundAudioPlugin extends Plugin {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("audio/*");
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(call, intent, "audioPicked");
     }
@@ -34,16 +38,40 @@ public class BackgroundAudioPlugin extends Plugin {
     @ActivityCallback
     private void audioPicked(PluginCall call, ActivityResult result) {
         if (call == null) return;
-        if (result.getResultCode() != android.app.Activity.RESULT_OK || result.getData() == null || result.getData().getData() == null) {
+        if (result.getResultCode() != android.app.Activity.RESULT_OK || result.getData() == null) {
             call.reject("Pemilihan file dibatalkan"); return;
         }
-        Uri uri = result.getData().getData();
+        Intent dataIntent = result.getData();
+        JSArray items = new JSArray();
+        try {
+            android.content.ClipData clip = dataIntent.getClipData();
+            if (clip != null) {
+                for (int i = 0; i < clip.getItemCount(); i++) {
+                    Uri uri = clip.getItemAt(i).getUri();
+                    if (uri != null) addPickedUri(uri, items);
+                }
+            } else if (dataIntent.getData() != null) {
+                addPickedUri(dataIntent.getData(), items);
+            }
+        } catch (Exception ex) {
+            call.reject("Tidak dapat membaca daftar file audio", ex); return;
+        }
+        if (items.length() == 0) { call.reject("Tidak ada file audio yang dipilih"); return; }
+        org.json.JSONObject first = items.optJSONObject(0);
+        JSObject resultData = new JSObject();
+        resultData.put("items", items);
+        resultData.put("uri", first == null ? "" : first.optString("uri", ""));
+        resultData.put("name", first == null ? "Audio lokal" : first.optString("name", "Audio lokal"));
+        call.resolve(resultData);
+    }
+
+    private void addPickedUri(Uri uri, JSArray items) throws Exception {
         try { getContext().getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); }
         catch (Exception ignored) { }
-        JSObject data = new JSObject();
-        data.put("uri", uri.toString());
-        data.put("name", queryDisplayName(uri));
-        call.resolve(data);
+        JSObject item = new JSObject();
+        item.put("uri", uri.toString());
+        item.put("name", queryDisplayName(uri));
+        items.put(item);
     }
 
     private String queryDisplayName(Uri uri) {
@@ -68,6 +96,22 @@ public class BackgroundAudioPlugin extends Plugin {
             else getContext().startService(intent);
             call.resolve();
         } catch (Exception ex) { call.reject("Gagal memulai pemutar audio native", ex); }
+    }
+
+    @PluginMethod
+    public void playQueue(PluginCall call) {
+        JSObject data = call.getData();
+        String itemsJson = data.optString("itemsJson", "[]");
+        try {
+            JSONArray items = new JSONArray(itemsJson);
+            if (items.length() == 0) { call.reject("Antrean audio kosong"); return; }
+            Intent intent = new Intent(getContext(), BackgroundAudioService.class);
+            intent.setAction(BackgroundAudioService.ACTION_PLAY_QUEUE);
+            intent.putExtra("itemsJson", itemsJson);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(intent);
+            else getContext().startService(intent);
+            call.resolve();
+        } catch (Exception ex) { call.reject("Antrean audio tidak valid", ex); }
     }
 
     @PluginMethod
@@ -122,8 +166,6 @@ package com.richmusic.app;
 
 import android.content.Intent;
 import android.net.Uri;
-import android.os.IBinder;
-import android.os.SystemClock;
 import androidx.annotation.Nullable;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
@@ -134,11 +176,16 @@ import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Owns the actual audio player and MediaSession independently of the Capacitor Activity. */
 public final class BackgroundAudioService extends MediaSessionService {
     public static final String ACTION_PLAY_LOCAL = "com.richmusic.app.action.PLAY_LOCAL";
     public static final String ACTION_PLAY_URL = "com.richmusic.app.action.PLAY_URL";
+    public static final String ACTION_PLAY_QUEUE = "com.richmusic.app.action.PLAY_QUEUE";
     public static final String ACTION_PAUSE = "com.richmusic.app.action.PAUSE";
     public static final String ACTION_RESUME = "com.richmusic.app.action.RESUME";
     public static final String ACTION_STOP = "com.richmusic.app.action.STOP";
@@ -174,6 +221,13 @@ public final class BackgroundAudioService extends MediaSessionService {
                 if (metadata.artist != null) currentArtist = metadata.artist.toString();
                 updateSnapshot();
             }
+            @Override public void onMediaItemTransition(MediaItem item, int reason) {
+                if (item != null && item.mediaMetadata != null) {
+                    if (item.mediaMetadata.title != null) currentTitle = item.mediaMetadata.title.toString();
+                    if (item.mediaMetadata.artist != null) currentArtist = item.mediaMetadata.artist.toString();
+                }
+                updateSnapshot();
+            }
             @Override public void onPlayerError(PlaybackException error) {
                 isPlaying = false;
                 updateSnapshot();
@@ -195,6 +249,8 @@ public final class BackgroundAudioService extends MediaSessionService {
                 String artist = value(intent.getStringExtra("artist"), "Rich Music");
                 if (uri != null && !uri.trim().isEmpty()) startItem(Uri.parse(uri), title, artist);
                 else stopSelf(startId);
+            } else if (ACTION_PLAY_QUEUE.equals(action)) {
+                startQueue(intent.getStringExtra("itemsJson"));
             } else if (ACTION_PAUSE.equals(action)) {
                 if (player != null) player.pause();
             } else if (ACTION_RESUME.equals(action)) {
@@ -212,14 +268,43 @@ public final class BackgroundAudioService extends MediaSessionService {
     }
 
     private void startItem(Uri uri, String title, String artist) {
-        currentTitle = title; currentArtist = artist;
         MediaMetadata metadata = new MediaMetadata.Builder().setTitle(title).setArtist(artist).build();
-        MediaItem item = new MediaItem.Builder().setUri(uri).setMediaMetadata(metadata).build();
+        MediaItem item = new MediaItem.Builder().setMediaId(uri.toString()).setUri(uri).setMediaMetadata(metadata).build();
         player.setMediaItem(item);
+        currentTitle = title; currentArtist = artist;
         player.prepare();
         player.play();
         isActive = true;
         updateSnapshot();
+    }
+
+    private void startQueue(String itemsJson) {
+        try {
+            JSONArray json = new JSONArray(itemsJson == null ? "[]" : itemsJson);
+            if (json.length() == 0) { isActive = false; return; }
+            List<MediaItem> items = new ArrayList<>();
+            for (int i = 0; i < json.length(); i++) {
+                JSONObject row = json.getJSONObject(i);
+                String uriText = value(row.optString("uri", ""), "");
+                if (uriText.isEmpty()) continue;
+                String title = value(row.optString("title", ""), "Audio lokal " + (i + 1));
+                String artist = value(row.optString("artist", ""), "File lokal · Android");
+                Uri uri = Uri.parse(uriText);
+                MediaMetadata metadata = new MediaMetadata.Builder().setTitle(title).setArtist(artist).build();
+                items.add(new MediaItem.Builder().setMediaId(uriText).setUri(uri).setMediaMetadata(metadata).build());
+            }
+            if (items.isEmpty()) { isActive = false; return; }
+            player.setMediaItems(items, 0, 0L);
+            currentTitle = items.get(0).mediaMetadata.title == null ? "Audio lokal" : items.get(0).mediaMetadata.title.toString();
+            currentArtist = items.get(0).mediaMetadata.artist == null ? "File lokal · Android" : items.get(0).mediaMetadata.artist.toString();
+            player.prepare();
+            player.play();
+            isActive = true;
+            updateSnapshot();
+        } catch (Exception ex) {
+            isPlaying = false; isActive = false;
+            android.util.Log.e("RichMusicPlayback", "Invalid native playback queue", ex);
+        }
     }
 
     private String value(String input, String fallback) {
