@@ -484,25 +484,10 @@ function startCurrent() {
   if (!s) return;
   const loadId = ++Player.loadId;
   const nativeAndroid = (() => { try { return !!window.Capacitor?.isNativePlatform?.() && window.Capacitor?.getPlatform?.() === 'android'; } catch { return false; } })();
-  const externalBridge = window.Capacitor?.Plugins?.BackgroundAudio;
-  // Android online tracks are handed to the installed YouTube Music/YouTube client first.
-  // A patched ReVanced client owns its own background audio session; RichMusic cannot read its audio stream.
-  if (nativeAndroid && s.videoId && externalBridge?.openYoutubeMusic) {
-    Player.externalHandoffActive = true;
-    Player.nativeBgActive = false;
-    try { if (Player.yt && Player.ready) Player.yt.pauseVideo(); } catch {}
-    try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
-    externalBridge.openYoutubeMusic({ url: `https://music.youtube.com/watch?v=${encodeURIComponent(s.videoId)}` }).then(() => {
-      if (loadId === Player.loadId) toast('Lagu dibuka di YouTube Music/ReVanced. Kembali ke RichMusic untuk tampilan lirik; kontrol audio memakai notifikasi aplikasi pemutar.');
-    }).catch(() => {
-      if (loadId !== Player.loadId) return;
-      Player.externalHandoffActive = false;
-      if (Player.yt && Player.ready) { try { Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() }); Player.yt.setPlaybackRate(Player.speed); Player.yt.playVideo(); } catch {} }
-      toast('Aplikasi YouTube Music/ReVanced tidak dapat dibuka; memakai pemutar dalam RichMusic. Background tidak dijamin.');
-    });
-    renderPlayButtons();
-    return;
-  }
+  // Keep online playback inside RichMusic first. The previous eager external-app handoff
+  // returned before the shared Now Playing/mini-player render block below, leaving the UI stale
+  // or apparently blank on Android. Only offer external YouTube/ReVanced as a fallback when
+  // the native Media3 resolver cannot find a direct audio source.
   Player.externalHandoffActive = false;
   if (nativeAndroid && window.RichMusicNativeOnline?.playQueue) {
     Player.nativeBgActive = true;

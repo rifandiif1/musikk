@@ -57,7 +57,20 @@ public class BackgroundAudioPlugin extends Plugin {
                 return;
             } catch (Exception ignored) { }
         }
-        call.reject("Aplikasi YouTube Music/YouTube yang didukung tidak ditemukan. Pasang YouTube Music/ReVanced lalu coba lagi.");
+        // ReVanced builds may use a custom package name. Let Android show an app chooser
+        // instead of silently falling back to the embedded WebView (which cannot guarantee background audio).
+        try {
+            Intent viewIntent = new Intent(Intent.ACTION_VIEW, uri);
+            Intent chooser = Intent.createChooser(viewIntent, "Putar dengan YouTube Music / ReVanced");
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(chooser);
+            JSObject result = new JSObject();
+            result.put("opened", true);
+            result.put("packageName", "chooser");
+            call.resolve(result);
+        } catch (Exception ex) {
+            call.reject("Tidak dapat membuka aplikasi pemutar YouTube", ex);
+        }
     }
     @PluginMethod
     public void pickAudio(PluginCall call) {

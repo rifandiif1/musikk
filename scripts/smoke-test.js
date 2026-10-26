@@ -15,7 +15,8 @@ const server = read('server.js');
 assert.equal(read('app.js'), app, 'root app.js must match public/app.js');
 assert.equal(read('index.html'), html, 'root index.html must match public/index.html');
 assert.equal(read('styles.css'), css, 'root styles.css must match public/styles.css');
-assert.match(html, /Fail-safe: never leave the native WebView[\s\S]*window\.setTimeout\(releaseSplash, 3500\)/, 'startup splash must release even if app.js throws');
+assert.doesNotMatch(html, /Fail-safe: never leave the native WebView/, 'avoid forced splash removal that can reveal a blank page before the app initializes');
+assert.match(app, /setTimeout\(hide, 2800\)/, 'normal app splash lifecycle should remain in charge of splash dismissal');
 
 // New offline audio UI must have exactly one matching element and a wired implementation.
 for (const id of [
@@ -63,12 +64,13 @@ assert.doesNotMatch(nativeScript, /import com\.getcapacitor\.ActivityResult;/, '
 assert.match(nativeScript, /FOREGROUND_SERVICE_MEDIA_PLAYBACK/, 'native player should use media-playback foreground service type');
 assert.match(nativeScript, /POST_NOTIFICATIONS/, 'Android 13+ notification permission should be declared and requested');
 assert.match(app, /window\.RichMusicNativeOnline\.playQueue\(Player\.queue, Player\.index\)/, 'Android main player should route selected songs to native direct-audio playback');
-assert.match(app, /Player\.externalHandoffActive = true/, 'Android online playback should prefer the installed YouTube/ReVanced client');
+assert.doesNotMatch(app, /Android online tracks are handed to the installed YouTube Music\/YouTube client first/, 'main player must not return early before rendering Now Playing');
+assert.match(app, /Keep online playback inside RichMusic first[\s\S]*?renderNowPlaying\(\);/, 'Android online playback should render the player before asynchronous source resolution completes');
 assert.match(app, /lagu ini mungkin berhenti saat diminimalkan/, 'app should disclose when it falls back to YouTube without background support');
 assert.match(app, /bridge\.openYoutubeMusic\(\{ url:/, 'main player should hand off YouTube songs to the installed YouTube/ReVanced client');
 assert.match(nativeScript, /public void openYoutubeMusic\(PluginCall call\)/, 'native bridge should provide YouTube/ReVanced handoff');
 assert.match(nativeScript, /app\.revanced\.android\.apps\.youtube\.music/, 'handoff should try common custom ReVanced YouTube Music package');
-assert.match(nativeScript, /Aplikasi YouTube Music\/YouTube yang didukung tidak ditemukan/, 'handoff should not silently open a browser instead of a supported app');
+assert.match(nativeScript, /Intent\.createChooser\(viewIntent, \"Putar dengan YouTube Music \/ ReVanced\"\)/, 'custom ReVanced package names should be supported through the Android app chooser');
 assert.match(app, /https:\/\/archive\.org\/advancedsearch\.php/, 'online archive audio search should be wired');
 assert.match(app, /if \(Player\.externalHandoffActive\) \{ toast\('Audio sedang dikelola aplikasi YouTube Music\/ReVanced/, 'RichMusic should explain that external playback controls belong to the destination app');
 assert.match(html, /id=\"online-audio-search-form\"/, 'online audio search UI should exist');
