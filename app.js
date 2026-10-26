@@ -498,25 +498,35 @@ function startCurrent() {
       if (loadId !== Player.loadId) return;
       Player.nativeBgActive = false;
       try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
-      // Direct-audio sources may be unavailable for copyrighted/catalog tracks. Hand off to
-      // the installed YouTube/YouTube Music app so a ReVanced build can own background playback.
-      // RichMusic cannot embed ReVanced patches inside its YouTube IFrame/WebView player.
-      const bridge = window.Capacitor?.Plugins?.BackgroundAudio;
-      const videoId = String(s.videoId || '').trim();
-      if (nativeAndroid && videoId && bridge?.openYoutubeMusic) {
-        try {
-          await bridge.openYoutubeMusic({ url: `https://music.youtube.com/watch?v=${encodeURIComponent(videoId)}` });
-          if (loadId === Player.loadId) toast('Lagu dibuka di aplikasi YouTube Music/YouTube. Background mengikuti kemampuan aplikasi tujuan (ReVanced mendukungnya jika terpasang dan terkonfigurasi).');
+      // Keep the user inside RichMusic. A failed direct-audio resolution must never
+      // launch a browser or another app without an explicit user action.
+      Player.nativeBgActive = false;
+      Player.externalHandoffActive = false;
+      if (loadId !== Player.loadId) return;
+      try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
+      toast(`Sumber audio latar tidak tersedia untuk lagu ini. Tetap memutar di RichMusic; pemutaran YouTube tertanam dapat berhenti saat diminimalkan. (${error?.message || 'Sumber langsung tidak ditemukan'})`);
+      let attempts = 0;
+      const playEmbedded = () => {
+        if (loadId !== Player.loadId) return;
+        if (!Player.yt || !Player.ready) {
+          if (++attempts < 40) { setTimeout(playEmbedded, 300); return; }
+          toast('Pemutar YouTube belum siap. Periksa koneksi internet lalu coba putar lagi.');
           renderPlayButtons();
           return;
-        } catch (handoffError) {
-          toast('Audio langsung tidak tersedia dan aplikasi YouTube tidak bisa dibuka. Memakai pemutar YouTube di RichMusic; background tidak dijamin.');
         }
-      } else {
-        toast(`${error?.message || 'Sumber audio background tidak tersedia'} Memutar melalui YouTube; lagu ini mungkin berhenti saat diminimalkan.`);
-      }
-      if (Player.yt && Player.ready) { try { Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() }); Player.yt.setPlaybackRate(Player.speed); Player.yt.playVideo(); } catch {} }
-      renderPlayButtons();
+        try {
+          Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() });
+          Player.yt.setPlaybackRate(Player.speed);
+          Player.yt.playVideo();
+          applyPlaybackQuality();
+          setTimeout(applyPlaybackQuality, 400);
+          setTimeout(applyPlaybackQuality, 1600);
+        } catch (playError) {
+          toast('Lagu tidak dapat dimulai di pemutar RichMusic. Coba lagu lain atau periksa koneksi.');
+        }
+        renderPlayButtons();
+      };
+      playEmbedded();
     });
   } else {
     Player.nativeBgActive = false;
@@ -3951,7 +3961,12 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
     if (!docs.length) throw new Error(`Audio streaming langsung tidak ditemukan untuk “${title}”. Coba cari di Musik online · Background.`);
     const titleKey = normalizeText(title), artistKey = normalizeText(artist);
     const ranked = docs.map(doc => { const dt = normalizeText(doc.title), da = normalizeText(doc.creator); let score = dt === titleKey ? 100 : (dt.includes(titleKey) || titleKey.includes(dt) ? 45 : 0); score += titleKey.split(' ').filter(w => w.length > 2 && dt.includes(w)).length * 5; if (artistKey && da.includes(artistKey)) score += 50; else if (artistKey && artistKey.split(' ').filter(w => w.length > 2).some(w => da.includes(w))) score += 10; return { doc, score }; }).sort((a,b) => b.score - a.score);
-    for (const candidate of ranked.slice(0, 5)) { try { return { ...(await resolveArchiveItem(candidate.doc.identifier)), sourceTitle: title, sourceArtist: artist, score: candidate.score }; } catch {} }
+    for (const candidate of ranked.slice(0, 5)) {
+      // Archive.org is a legal direct-audio fallback, not a reliable catalog for every YouTube track.
+      // Require a meaningful title match instead of playing a loosely related result by accident.
+      if (candidate.score < 35) continue;
+      try { return { ...(await resolveArchiveItem(candidate.doc.identifier)), sourceTitle: title, sourceArtist: artist, score: candidate.score }; } catch {}
+    }
     throw new Error(`Tidak ada file audio langsung yang bisa diputar untuk “${title}”.`);
   }
   window.RichMusicNativeOnline = {
