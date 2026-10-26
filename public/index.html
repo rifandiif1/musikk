@@ -10,6 +10,20 @@
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <meta name="theme-color" content="#000000" />
+<!-- Fail-safe: never leave the native WebView permanently covered by the splash if app.js fails during startup. -->
+<script>
+(function () {
+  function releaseSplash() {
+    var splash = document.getElementById('splash');
+    if (!splash) return;
+    splash.classList.add('gone');
+    window.setTimeout(function () { if (splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 750);
+  }
+  window.setTimeout(releaseSplash, 3500);
+  window.addEventListener('error', function () { window.setTimeout(releaseSplash, 250); }, { once: true });
+  window.addEventListener('unhandledrejection', function () { window.setTimeout(releaseSplash, 250); }, { once: true });
+})();
+</script>
 <title>Rich Music</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="/logo-192.png" />

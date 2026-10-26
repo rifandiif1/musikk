@@ -15,6 +15,7 @@ const server = read('server.js');
 assert.equal(read('app.js'), app, 'root app.js must match public/app.js');
 assert.equal(read('index.html'), html, 'root index.html must match public/index.html');
 assert.equal(read('styles.css'), css, 'root styles.css must match public/styles.css');
+assert.match(html, /Fail-safe: never leave the native WebView[\s\S]*window\.setTimeout\(releaseSplash, 3500\)/, 'startup splash must release even if app.js throws');
 
 // New offline audio UI must have exactly one matching element and a wired implementation.
 for (const id of [
