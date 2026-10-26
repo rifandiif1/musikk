@@ -120,7 +120,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.SystemClock;
-import androidx.core.app.NotificationCompat;
 
 public class BackgroundAudioService extends Service {
     public static final String ACTION_PLAY_LOCAL = "com.richmusic.app.action.PLAY_LOCAL";
@@ -231,9 +230,32 @@ public class BackgroundAudioService extends Service {
         PendingIntent togglePending = PendingIntent.getService(this, 7403, toggle, PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
         Intent stop = new Intent(this, BackgroundAudioService.class).setAction(ACTION_STOP);
         PendingIntent stopPending = PendingIntent.getService(this, 7404, stop, PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
-        return new NotificationCompat.Builder(this, CHANNEL_ID).setSmallIcon(R.drawable.ic_stat_music).setContentTitle(currentTitle).setContentText(currentArtist + " · Rich Music").setCategory(NotificationCompat.CATEGORY_TRANSPORT).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setOngoing(isActive).setOnlyAlertOnce(true).setContentIntent(content).setPriority(NotificationCompat.PRIORITY_LOW)
-          .addAction(android.R.drawable.ic_media_pause == 0 ? 0 : (isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play), isPlaying ? "Jeda" : "Lanjutkan", togglePending)
-          .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Berhenti", stopPending).build();
+        // Use the platform MediaStyle tied to this MediaSession. Plain action buttons alone
+        // render as an ordinary notification and do not create the system media-player card.
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_music)
+            .setContentTitle(currentTitle)
+            .setContentText(currentArtist + " · Rich Music")
+            .setCategory(Notification.CATEGORY_TRANSPORT)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setOngoing(isActive)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(content)
+            .setShowWhen(false)
+            .addAction(new Notification.Action.Builder(
+                isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+                isPlaying ? "Jeda" : "Lanjutkan", togglePending).build())
+            .addAction(new Notification.Action.Builder(
+                android.R.drawable.ic_menu_close_clear_cancel, "Berhenti", stopPending).build());
+        if (session != null) {
+            builder.setStyle(new Notification.MediaStyle()
+                .setMediaSession(session.getSessionToken())
+                .setShowActionsInCompactView(0, 1));
+        }
+        if (Build.VERSION.SDK_INT >= 31) {
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
+        }
+        return builder.build();
     }
     private void showNotification() { NotificationManager nm = getSystemService(NotificationManager.class); if (nm != null && isActive) nm.notify(NOTIFICATION_ID, buildNotification()); }
     @Override public void onTaskRemoved(Intent rootIntent) { /* Native local playback intentionally continues after task swipe. */ super.onTaskRemoved(rootIntent); }

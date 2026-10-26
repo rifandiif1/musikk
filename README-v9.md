@@ -2,6 +2,12 @@
 
 Paket source web/PWA + Android Capacitor, berdasarkan source v8 hotfix yang tersedia. Fokus rilis ini adalah playback native lokal yang lebih nyaman dan kooperatif terhadap sistem audio Android.
 
+## Hotfix v9.1 — media notification
+
+- Notifikasi pemutar native sekarang memakai `Notification.MediaStyle` yang ditautkan ke `MediaSession`, agar Android dapat menampilkan kartu media sistem dengan kontrol play/pause dan stop.
+- Dua kontrol pertama ditampilkan pada notifikasi ringkas; status metadata dan playback state tetap dikirim melalui `MediaSession`.
+- Cache service worker dinaikkan ke `rich-music-shell-v28`.
+
 ## Perubahan v9
 
 - **Timeline audio native**: slider posisi, waktu berjalan, durasi, dan seek ke posisi yang dipilih untuk file yang sedang diputar melalui Android Background Player.
@@ -16,6 +22,7 @@ Paket source web/PWA + Android Capacitor, berdasarkan source v8 hotfix yang ters
 2. Jalankan workflow GitHub Actions **Build Android APK**.
 3. Setelah APK benar-benar berhasil dibangun, instal di perangkat Android 8.0+.
 4. Buka **Local Audio Lab → Android Background Player → Pilih & putar file**.
+5. Saat audio lokal mulai diputar, tarik panel notifikasi atau Quick Settings. Kartu media harus menampilkan judul lagu dan kontrol pemutaran. Jika tidak muncul, pastikan notifikasi diizinkan dan pengujian dilakukan pada APK hasil build terbaru, bukan instalasi APK lama.
 5. Gunakan timeline untuk berpindah posisi; kontrol pause/resume/stop juga tersedia dari UI dan notifikasi Android.
 
 ## Batasan

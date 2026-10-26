@@ -34,7 +34,7 @@ assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause lo
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
 assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
-assert.match(sw, /rich-music-shell-v27/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v28/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -48,6 +48,9 @@ assert.match(workflow, /install-android-background\.sh/, 'Android workflow shoul
 const nativeScript = read('scripts/install-android-background.sh');
 assert.match(nativeScript, /new MediaPlayer\(\)/, 'Android native service should own local audio playback');
 assert.match(nativeScript, /new MediaSession\(this, \"RichMusicSession\"\)/, 'native player should expose an Android MediaSession');
+assert.match(nativeScript, /new Notification\.MediaStyle\(\)/, 'media notification must use Android MediaStyle');
+assert.match(nativeScript, /setMediaSession\(session\.getSessionToken\(\)\)/, 'media notification must bind to MediaSession');
+assert.match(nativeScript, /setShowActionsInCompactView\(0, 1\)/, 'media notification must show compact playback controls');
 assert.match(nativeScript, /requestAudioFocus\(\)/, 'native playback should request audio focus');
 assert.match(nativeScript, /ACTION_SEEK/, 'native playback should support seeking');
 assert.match(nativeScript, /AudioFocusRequest/, 'Android 8+ playback should use AudioFocusRequest');

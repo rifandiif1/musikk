@@ -1,4 +1,4 @@
-# Changelog — Rich Music Premium v9
+# Changelog — Rich Music Premium v9.1
 
 ## Native playback
 - Menambahkan slider seek, waktu saat ini, dan durasi untuk Android Background Player.
@@ -16,3 +16,9 @@
 - `npm test`: lulus.
 - `bash -n scripts/install-android-background.sh`: lulus.
 - Build Gradle dan pengujian perangkat Android fisik: belum dijalankan.
+
+## v9.1 — Media notification hotfix
+- Mengganti notifikasi biasa dengan Android `Notification.MediaStyle` yang ditautkan ke token `MediaSession`.
+- Menampilkan kontrol Jeda/Lanjutkan dan Berhenti dalam tampilan ringkas notifikasi media.
+- Menaikkan service-worker cache ke `rich-music-shell-v28`.
+- Menambah smoke-test untuk memastikan MediaStyle dan token MediaSession tidak terhapus.
