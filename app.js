@@ -47,11 +47,10 @@ function applyTint(key) {
 }
 function currentTheme() { return 'dark'; }
 
-// YouTube IFrame playback remains owned by the embedded YouTube player. Media3 cannot
-// take over that stream; the native service is for Android-picked local files and authorized
-// direct audio URLs. Do not report YouTube as background-capable unless a supported native
-// streaming source is integrated.
-function syncAndroidBackgroundPlayback(_playing) { /* Android main playback uses RichMusicNativeOnline direct-audio routing. */ }
+// Android catalog playback is handed to the installed music app so its own MediaSession
+// supplies background playback and notification controls. Native Media3 remains responsible
+// for files selected through the Android local-audio panel.
+function syncAndroidBackgroundPlayback(_playing) { /* The actual Android audio owner manages its own MediaSession. */ }
 
 // Mark the native wrapper so Android safe-area rules can be applied without changing the PWA.
 try {
@@ -484,78 +483,44 @@ function startCurrent() {
   if (!s) return;
   const loadId = ++Player.loadId;
   const nativeAndroid = (() => { try { return !!window.Capacitor?.isNativePlatform?.() && window.Capacitor?.getPlatform?.() === 'android'; } catch { return false; } })();
-  // Keep online playback inside RichMusic first. The previous eager external-app handoff
-  // returned before the shared Now Playing/mini-player render block below, leaving the UI stale
-  // or apparently blank on Android. Only offer external YouTube/ReVanced as a fallback when
-  // the native Media3 resolver cannot find a direct audio source.
+  Player.nativeBgActive = false;
   Player.externalHandoffActive = false;
-  if (nativeAndroid && window.RichMusicNativeOnline?.playQueue) {
-    Player.nativeBgActive = true;
+
+  if (nativeAndroid) {
+    // A YouTube video ID is not a playable audio URI for Media3. Hand the catalog track
+    // to the installed YouTube Music/YouTube/ReVanced app, which owns the real audio session,
+    // background playback and Android media notification. Local files still use Media3 below.
     try { if (Player.yt && Player.ready) Player.yt.pauseVideo(); } catch {}
-    window.RichMusicNativeOnline.playQueue(Player.queue, Player.index).then(() => {
-      if (loadId === Player.loadId) toast('Pemutar native aktif. Kontrol media Android seharusnya tersedia di notifikasi.');
-    }).catch(async error => {
-      if (loadId !== Player.loadId) return;
-      Player.nativeBgActive = false;
-      try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
-      // If no direct stream is available, hand the track to an installed YouTube/ReVanced
-      // client. That app owns the actual audio session and its system media notification.
-      // This is the only reliable fallback for catalog tracks without a direct audio URL.
-      if (loadId !== Player.loadId) return;
-      const bridge = window.Capacitor?.Plugins?.BackgroundAudio;
-      if (nativeAndroid && bridge?.openYoutubeMusic && s?.videoId) {
-        try {
-          await bridge.openYoutubeMusic({ url: `https://music.youtube.com/watch?v=${encodeURIComponent(s.videoId)}` });
-          if (loadId !== Player.loadId) return;
-          Player.nativeBgActive = false;
-          Player.externalHandoffActive = true;
-          try { if (Player.yt && Player.ready) Player.yt.pauseVideo(); } catch {}
-          toast('Dibuka di YouTube Music/ReVanced. Minimalkan RichMusic; gunakan notifikasi aplikasi pemutar untuk kontrol audio.');
-          renderPlayButtons();
-          return;
-        } catch (handoffError) {
-          console.warn('External background playback handoff failed:', handoffError);
+    (async () => {
+      try {
+        if (!window.RichMusicNativeOnline?.openYoutubeMusic) {
+          throw new Error('Bridge Android belum tersedia. Build ulang APK dari source terbaru.');
         }
-      }
-      Player.nativeBgActive = false;
-      Player.externalHandoffActive = false;
-      if (loadId !== Player.loadId) return;
-      try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
-      toast(`Sumber audio latar tidak tersedia. Install YouTube Music/ReVanced yang mendukung background playback. (${error?.message || 'Sumber langsung tidak ditemukan'})`);
-      let attempts = 0;
-      const playEmbedded = () => {
+        await window.RichMusicNativeOnline.openYoutubeMusic(`https://music.youtube.com/watch?v=${encodeURIComponent(s.videoId)}`);
         if (loadId !== Player.loadId) return;
-        if (!Player.yt || !Player.ready) {
-          if (++attempts < 40) { setTimeout(playEmbedded, 300); return; }
-          toast('Pemutar YouTube belum siap. Periksa koneksi internet lalu coba putar lagi.');
-          renderPlayButtons();
-          return;
-        }
-        try {
-          Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() });
-          Player.yt.setPlaybackRate(Player.speed);
-          Player.yt.playVideo();
-          applyPlaybackQuality();
-          setTimeout(applyPlaybackQuality, 400);
-          setTimeout(applyPlaybackQuality, 1600);
-        } catch (playError) {
-          toast('Lagu tidak dapat dimulai di pemutar RichMusic. Coba lagu lain atau periksa koneksi.');
-        }
-        renderPlayButtons();
-      };
-      playEmbedded();
-    });
+        Player.externalHandoffActive = true;
+        toast('Lagu dibuka di YouTube Music/ReVanced. Minimalkan aplikasi tujuan; notifikasi dan kontrol musik dikelola aplikasi tersebut.');
+      } catch (error) {
+        if (loadId !== Player.loadId) return;
+        Player.externalHandoffActive = false;
+        toast(`Tidak dapat membuka pemutar latar: ${error?.message || 'pastikan YouTube Music/ReVanced terpasang'}`);
+      }
+      renderPlayButtons();
+    })();
   } else {
-    Player.nativeBgActive = false;
     const tryPlay = () => {
       if (loadId !== Player.loadId) return;
       if (!Player.ready) return setTimeout(tryPlay, 300);
-      Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() });
-      Player.yt.setPlaybackRate(Player.speed);
-      Player.yt.playVideo();
-      applyPlaybackQuality();
-      setTimeout(applyPlaybackQuality, 400);
-      setTimeout(applyPlaybackQuality, 1600);
+      try {
+        Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() });
+        Player.yt.setPlaybackRate(Player.speed);
+        Player.yt.playVideo();
+        applyPlaybackQuality();
+        setTimeout(applyPlaybackQuality, 400);
+        setTimeout(applyPlaybackQuality, 1600);
+      } catch (error) {
+        toast('Lagu tidak dapat dimulai. Periksa koneksi internet lalu coba lagi.');
+      }
     };
     tryPlay();
   }
@@ -572,7 +537,7 @@ function startCurrent() {
   document.body.classList.add('has-player');
   document.title = `${songTitleArtist(s.title, s.artist)} • Rich Music`;
   applyTint(s.videoId || s.title);
-  if ('mediaSession' in navigator) {
+  if (!nativeAndroid && 'mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: songTitleArtist(s.title, s.artist), artist: s.artist || '',
       artwork: s.thumbnail ? [{ src: s.thumbnail, sizes: '544x544' }] : [],

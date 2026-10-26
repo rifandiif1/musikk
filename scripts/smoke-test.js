@@ -36,7 +36,7 @@ assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause lo
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
 assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
-assert.match(sw, /rich-music-shell-v37/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v38/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -66,16 +66,16 @@ assert.match(nativeScript, /import androidx\.activity\.result\.ActivityResult;/,
 assert.doesNotMatch(nativeScript, /import com\.getcapacitor\.ActivityResult;/, 'invalid Capacitor ActivityResult import must not return');
 assert.match(nativeScript, /FOREGROUND_SERVICE_MEDIA_PLAYBACK/, 'native player should use media-playback foreground service type');
 assert.match(nativeScript, /POST_NOTIFICATIONS/, 'Android 13+ notification permission should be declared and requested');
-assert.match(app, /window\.RichMusicNativeOnline\.playQueue\(Player\.queue, Player\.index\)/, 'Android main player should route selected songs to native direct-audio playback');
+assert.match(app, /window\.RichMusicNativeOnline\.openYoutubeMusic\(`https:\/\/music\.youtube\.com\/watch\?v=/, 'Android online catalog tracks should hand off to a destination app that owns background playback');
 assert.doesNotMatch(app, /Android online tracks are handed to the installed YouTube Music\/YouTube client first/, 'main player must not return early before rendering Now Playing');
-assert.match(app, /Keep online playback inside RichMusic first[\s\S]*?renderNowPlaying\(\);/, 'Android online playback should render the player before asynchronous source resolution completes');
-assert.match(app, /Dibuka di YouTube Music\/ReVanced\. Minimalkan RichMusic/, 'app should tell the user to use the destination app notification after handoff');
-assert.match(app, /bridge\.openYoutubeMusic\(\{ url:/, 'failed direct-audio resolution should hand off to an external media app for background playback');
+assert.match(app, /if \(!nativeAndroid && 'mediaSession' in navigator\)/, 'Android should not register a duplicate WebView media session');
+assert.match(app, /Lagu dibuka di YouTube Music\/ReVanced\. Minimalkan aplikasi tujuan/, 'app should tell the user to use the destination app notification after handoff');
+assert.match(app, /async openYoutubeMusic\(url\)/, 'Android playback bridge should expose the destination-app handoff method');
 assert.match(nativeScript, /public void openYoutubeMusic\(PluginCall call\)/, 'native bridge should provide YouTube/ReVanced handoff');
 assert.match(nativeScript, /app\.revanced\.android\.apps\.youtube\.music/, 'handoff should try common custom ReVanced YouTube Music package');
 assert.match(nativeScript, /Intent\.createChooser\(viewIntent, \"Putar dengan YouTube Music \/ ReVanced\"\)/, 'custom ReVanced package names should be supported through the Android app chooser');
 assert.match(app, /https:\/\/archive\.org\/advancedsearch\.php/, 'online archive audio search should be wired');
-assert.match(app, /If no direct stream is available[\s\S]*?system media notification/, 'fallback must hand off playback to a client that owns its media notification');
+assert.match(app, /A YouTube video ID is not a playable audio URI for Media3/, 'online catalog must not be passed to Media3 as if video ID were a direct audio URL');
 assert.match(html, /id=\"online-audio-search-form\"/, 'online audio search UI should exist');
 assert.match(app, /bridge\?\.pickAudio/, 'Android local file picker should be wired');
 assert.match(app, /bridge\.playQueue\(\{ itemsJson: JSON\.stringify\(nativeItems\) \}\)/, 'native local audio should pass selected content URIs to the service');
