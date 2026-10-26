@@ -1,39 +1,29 @@
-# Rich Music Premium v9
+# Rich Music Premium v9.2 — Background Playback Repair
 
-Paket source web/PWA + Android Capacitor, berdasarkan source v8 hotfix yang tersedia. Fokus rilis ini adalah playback native lokal yang lebih nyaman dan kooperatif terhadap sistem audio Android.
+## Apa yang berubah
 
-## Hotfix v9.1 — media notification
+- Pemutar audio native lokal dipindahkan ke **AndroidX Media3 ExoPlayer + MediaSessionService**. Service terpisah dari Activity/WebView dan bertanggung jawab atas audio serta sesi media.
+- Notifikasi media dihasilkan oleh `MediaSessionService` berdasarkan status player sebenarnya, termasuk metadata lagu dan kontrol sistem; tidak lagi membuat notifikasi manual yang dapat terlepas dari player.
+- Plugin native tetap menyediakan pilih file, play/pause/resume/stop, status dan seek.
+- Ditambahkan metode native `playUrl` untuk **URL audio HTTP(S) langsung** yang memang dapat diakses sebagai media. Tautan halaman web dan ID/URL halaman YouTube bukan URL audio langsung.
+- Manifest menyatakan `mediaPlayback` foreground service dan permission yang relevan. Dependensi Media3 ditambahkan oleh generator saat workflow membuat proyek Android.
+- Cache service worker dinaikkan ke `rich-music-shell-v29`.
 
-- Notifikasi pemutar native sekarang memakai `Notification.MediaStyle` yang ditautkan ke `MediaSession`, agar Android dapat menampilkan kartu media sistem dengan kontrol play/pause dan stop.
-- Dua kontrol pertama ditampilkan pada notifikasi ringkas; status metadata dan playback state tetap dikirim melalui `MediaSession`.
-- Cache service worker dinaikkan ke `rich-music-shell-v28`.
+## Cara menguji pemutar lokal
 
-## Perubahan v9
-
-- **Timeline audio native**: slider posisi, waktu berjalan, durasi, dan seek ke posisi yang dipilih untuk file yang sedang diputar melalui Android Background Player.
-- **Audio focus Android**: native player meminta audio focus, pause ketika fokus audio hilang, mengurangi volume pada duck sementara, dan memulihkan volume/opsional playback saat fokus kembali.
-- **UI Local Audio Lab**: timeline native mengikuti status player melalui polling ketika panel terbuka; kontrol dinonaktifkan jika tidak ada audio aktif.
-- **Validasi source**: smoke test mengecek API seek, audio focus, AndroidX `ActivityResult` import, dan cache shell terbaru.
-- Service worker cache dinaikkan menjadi `rich-music-shell-v27`.
-
-## Penggunaan
-
-1. Ganti source repository dengan isi ZIP v9.
-2. Jalankan workflow GitHub Actions **Build Android APK**.
-3. Setelah APK benar-benar berhasil dibangun, instal di perangkat Android 8.0+.
+1. Ganti source repo dengan isi ZIP ini.
+2. Jalankan GitHub Actions → **Build Android APK** dan pastikan job `Build debug APK` benar-benar berstatus sukses.
+3. Unduh artifact `rich-music-android-debug` dari run yang sama, instal APK itu, lalu izinkan notifikasi jika Android memintanya.
 4. Buka **Local Audio Lab → Android Background Player → Pilih & putar file**.
-5. Saat audio lokal mulai diputar, tarik panel notifikasi atau Quick Settings. Kartu media harus menampilkan judul lagu dan kontrol pemutaran. Jika tidak muncul, pastikan notifikasi diizinkan dan pengujian dilakukan pada APK hasil build terbaru, bukan instalasi APK lama.
-5. Gunakan timeline untuk berpindah posisi; kontrol pause/resume/stop juga tersedia dari UI dan notifikasi Android.
+5. Pastikan audio terdengar, kartu media muncul di panel notifikasi/Quick Settings, dan tombol pause/resume/stop berfungsi.
+6. Pindah ke Home atau kunci layar; audio lokal harus tetap berjalan. Uji juga dengan menutup aplikasi dari Recent Apps.
+7. Jika gagal, simpan logcat dari proses `com.richmusic.app` dan hasil Gradle build. Jangan menguji APK lama dari run sebelumnya.
 
-## Batasan
+## Batasan penting untuk pemutaran online
 
-- Native background playback hanya untuk file yang dipilih lewat Android Background Player. Pustaka IndexedDB Web Audio dan YouTube IFrame tetap menggunakan jalur playback terpisah.
-- Visualizer dan EQ berbasis Web Audio tidak menganalisis audio native yang diputar oleh MediaPlayer.
-- Perilaku background tetap dapat dipengaruhi kebijakan baterai/perangkat. Android 13+ juga memiliki izin notifikasi.
-- Timeline UI hanya dipoll ketika Local Audio Lab terbuka; pemutaran native sendiri tidak bergantung pada panel itu.
+Player utama RichMusic menggunakan **YouTube IFrame Player API**. Audio itu dimiliki WebView/YouTube, bukan oleh ExoPlayer native. Service foreground tidak bisa mengambil alih stream audio dari iframe, sehingga menambahkan notifikasi saja tidak dapat membuat pemutaran YouTube tetap berjalan secara andal setelah aplikasi ditutup. Metode `playUrl` hanya mendukung URL media langsung yang sah/diizinkan oleh penyedianya; ia tidak mengubah URL video YouTube menjadi stream audio. Untuk background playback pada katalog online, sumber streaming harus menyediakan URL audio yang boleh diputar di aplikasi atau integrasi resmi yang mendukung background playback.
 
-## Validasi yang dilakukan
+## Status validasi
 
-`npm test`, `bash -n scripts/install-android-background.sh`, sinkronisasi file root dengan `public/`, dan pemeriksaan integritas ZIP dijalankan pada source ini.
-
-**Build Gradle APK dan pengujian perangkat fisik belum dijalankan dalam lingkungan ini.** Smoke test dan pemeriksaan sintaks bukan bukti bahwa APK sudah terkompilasi atau perilaku runtime sudah terverifikasi.
+- Source test dan generator script dapat diperiksa secara lokal.
+- **Build Gradle dan pengujian perangkat belum diverifikasi di lingkungan pembuatan ZIP ini.** Jangan anggap APK berhasil sebelum workflow GitHub Actions menyelesaikan `assembleDebug` dan APK diuji pada perangkat.

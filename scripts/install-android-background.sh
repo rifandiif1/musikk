@@ -70,6 +70,25 @@ public class BackgroundAudioPlugin extends Plugin {
         } catch (Exception ex) { call.reject("Gagal memulai pemutar audio native", ex); }
     }
 
+    @PluginMethod
+    public void playUrl(PluginCall call) {
+        JSObject data = call.getData();
+        String uri = data.optString("url", "");
+        String title = data.optString("title", "Audio online");
+        String artist = data.optString("artist", "Rich Music");
+        if (!(uri.startsWith("https://") || uri.startsWith("http://"))) {
+            call.reject("URL harus berupa URL audio HTTP(S) langsung, bukan tautan halaman atau ID YouTube"); return;
+        }
+        Intent intent = new Intent(getContext(), BackgroundAudioService.class);
+        intent.setAction(BackgroundAudioService.ACTION_PLAY_URL);
+        intent.putExtra("uri", uri); intent.putExtra("title", title); intent.putExtra("artist", artist);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(intent);
+            else getContext().startService(intent);
+            call.resolve();
+        } catch (Exception ex) { call.reject("Gagal memulai audio online native", ex); }
+    }
+
     private void send(String action) {
         Intent intent = new Intent(getContext(), BackgroundAudioService.class); intent.setAction(action);
         try { getContext().startService(intent); } catch (Exception ignored) { }
@@ -101,166 +120,127 @@ JAVA
 cat > "$PKGDIR/BackgroundAudioService.java" <<'JAVA'
 package com.richmusic.app;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.Service;
 import android.content.Intent;
-import android.media.AudioAttributes;
-import android.media.AudioFocusRequest;
-import android.media.AudioManager;
-import android.media.MediaPlayer;
-import android.media.MediaMetadata;
-import android.media.session.MediaSession;
-import android.media.session.PlaybackState;
 import android.net.Uri;
-import android.os.Build;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
 import android.os.SystemClock;
+import androidx.annotation.Nullable;
+import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.MediaSessionService;
 
-public class BackgroundAudioService extends Service {
+/** Owns the actual audio player and MediaSession independently of the Capacitor Activity. */
+public final class BackgroundAudioService extends MediaSessionService {
     public static final String ACTION_PLAY_LOCAL = "com.richmusic.app.action.PLAY_LOCAL";
+    public static final String ACTION_PLAY_URL = "com.richmusic.app.action.PLAY_URL";
     public static final String ACTION_PAUSE = "com.richmusic.app.action.PAUSE";
     public static final String ACTION_RESUME = "com.richmusic.app.action.RESUME";
     public static final String ACTION_STOP = "com.richmusic.app.action.STOP";
     public static final String ACTION_SEEK = "com.richmusic.app.action.SEEK";
-    private static final String CHANNEL_ID = "rich_music_playback";
-    private static final int NOTIFICATION_ID = 7401;
-    public static volatile String currentTitle = "Rich Music", currentArtist = "Audio lokal";
-    public static volatile boolean isPlaying = false, isActive = false;
-    public static volatile long positionMs = 0, durationMs = 0;
-    private MediaPlayer player;
-    private MediaSession session;
-    private AudioManager audioManager;
-    private AudioFocusRequest focusRequest;
-    private boolean resumeAfterFocus = false;
-    private final AudioManager.OnAudioFocusChangeListener focusListener = change -> {
-        if (change == AudioManager.AUDIOFOCUS_LOSS) { resumeAfterFocus = false; pausePlayback(); }
-        else if (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) { resumeAfterFocus = isPlaying; pausePlayback(); }
-        else if (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) { if (player != null && isPlaying) { try { player.setVolume(0.25f, 0.25f); } catch (Exception ignored) {} } }
-        else if (change == AudioManager.AUDIOFOCUS_GAIN) { if (player != null) { try { player.setVolume(1f, 1f); } catch (Exception ignored) {} } if (resumeAfterFocus) { resumeAfterFocus = false; resumePlayback(); } }
-    };
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Runnable progress = new Runnable() { @Override public void run() {
-        if (player != null && player.isPlaying()) { try { positionMs = player.getCurrentPosition(); } catch (Exception ignored) {} updateSessionState(); handler.postDelayed(this, 1000); }
-    }};
+
+    public static volatile String currentTitle = "Rich Music";
+    public static volatile String currentArtist = "Audio lokal";
+    public static volatile boolean isPlaying = false;
+    public static volatile boolean isActive = false;
+    public static volatile long positionMs = 0L;
+    public static volatile long durationMs = 0L;
+
+    private ExoPlayer player;
+    private MediaSession mediaSession;
 
     @Override public void onCreate() {
         super.onCreate();
-        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
-        NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Music playback", NotificationManager.IMPORTANCE_LOW);
-            channel.setDescription("Kontrol pemutaran audio lokal Rich Music"); channel.setShowBadge(false); manager.createNotificationChannel(channel);
-        }
-        session = new MediaSession(this, "RichMusicSession");
-        session.setCallback(new MediaSession.Callback() {
-            @Override public void onPlay() { resumePlayback(); }
-            @Override public void onPause() { pausePlayback(); }
-            @Override public void onStop() { stopPlayback(true); }
-            @Override public void onSeekTo(long pos) { if (player != null) { try { player.seekTo((int)pos); positionMs = pos; updateSessionState(); } catch (Exception ignored) {} } }
+        player = new ExoPlayer.Builder(this).build();
+        player.setAudioAttributes(new AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build(), true);
+        player.addListener(new Player.Listener() {
+            @Override public void onIsPlayingChanged(boolean playing) {
+                isPlaying = playing;
+                isActive = player != null && player.getMediaItemCount() > 0
+                        && player.getPlaybackState() != Player.STATE_IDLE;
+                updateSnapshot();
+            }
+            @Override public void onPlaybackStateChanged(int state) { updateSnapshot(); }
+            @Override public void onMediaMetadataChanged(MediaMetadata metadata) {
+                if (metadata.title != null) currentTitle = metadata.title.toString();
+                if (metadata.artist != null) currentArtist = metadata.artist.toString();
+                updateSnapshot();
+            }
+            @Override public void onPlayerError(PlaybackException error) {
+                isPlaying = false;
+                updateSnapshot();
+            }
         });
-        session.setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS | MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);
-        session.setActive(true);
+        mediaSession = new MediaSession.Builder(this, player).build();
+    }
+
+    @Nullable @Override public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
+        return mediaSession;
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null || intent.getAction() == null) return START_NOT_STICKY;
-        String action = intent.getAction();
-        if (ACTION_PLAY_LOCAL.equals(action)) startLocal(intent);
-        else if (ACTION_PAUSE.equals(action)) pausePlayback();
-        else if (ACTION_RESUME.equals(action)) resumePlayback();
-        else if (ACTION_STOP.equals(action)) stopPlayback(true);
-        else if (ACTION_SEEK.equals(action) && player != null) { long position = Math.max(0L, intent.getLongExtra("position", 0L)); try { player.seekTo((int)Math.min(position, durationMs)); positionMs = Math.min(position, durationMs); updateSessionState(); } catch (Exception ignored) {} }
-        return START_NOT_STICKY;
+        if (intent != null) {
+            String action = intent.getAction();
+            if (ACTION_PLAY_LOCAL.equals(action) || ACTION_PLAY_URL.equals(action)) {
+                String uri = intent.getStringExtra("uri");
+                String title = value(intent.getStringExtra("title"), "Audio");
+                String artist = value(intent.getStringExtra("artist"), "Rich Music");
+                if (uri != null && !uri.trim().isEmpty()) startItem(Uri.parse(uri), title, artist);
+                else stopSelf(startId);
+            } else if (ACTION_PAUSE.equals(action)) {
+                if (player != null) player.pause();
+            } else if (ACTION_RESUME.equals(action)) {
+                if (player != null && player.getMediaItemCount() > 0) player.play();
+            } else if (ACTION_STOP.equals(action)) {
+                if (player != null) { player.stop(); player.clearMediaItems(); }
+                isPlaying = false; isActive = false; positionMs = 0L; durationMs = 0L;
+                stopSelf(startId);
+            } else if (ACTION_SEEK.equals(action) && player != null) {
+                player.seekTo(Math.max(0L, intent.getLongExtra("position", 0L)));
+            }
+        }
+        // MediaSessionService owns foreground promotion and the platform media notification.
+        return super.onStartCommand(intent, flags, startId);
     }
 
-    private void startLocal(Intent intent) {
-        String uri = intent.getStringExtra("uri");
-        if (uri == null || uri.isEmpty()) { stopSelf(); return; }
-        currentTitle = value(intent.getStringExtra("title"), "Audio lokal");
-        currentArtist = value(intent.getStringExtra("artist"), "Perangkat ini");
-        stopPlayerOnly();
-        try {
-            if (!requestAudioFocus()) { isActive = false; stopSelf(); return; }
-            player = new MediaPlayer();
-            player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build());
-            player.setWakeMode(getApplicationContext(), android.os.PowerManager.PARTIAL_WAKE_LOCK);
-            player.setDataSource(getApplicationContext(), Uri.parse(uri));
-            player.setOnPreparedListener(mp -> { durationMs = mp.getDuration(); positionMs = 0; mp.start(); isPlaying = true; isActive = true; updateMetadata(); updateSessionState(); showNotification(); handler.removeCallbacks(progress); handler.post(progress); });
-            player.setOnCompletionListener(mp -> stopPlayback(true));
-            player.setOnErrorListener((mp, what, extra) -> { stopPlayback(true); return true; });
-            isActive = true; isPlaying = false;
-            if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, buildNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-            else startForeground(NOTIFICATION_ID, buildNotification());
-            player.prepareAsync();
-        } catch (Exception e) { stopPlayback(true); }
+    private void startItem(Uri uri, String title, String artist) {
+        currentTitle = title; currentArtist = artist;
+        MediaMetadata metadata = new MediaMetadata.Builder().setTitle(title).setArtist(artist).build();
+        MediaItem item = new MediaItem.Builder().setUri(uri).setMediaMetadata(metadata).build();
+        player.setMediaItem(item);
+        player.prepare();
+        player.play();
+        isActive = true;
+        updateSnapshot();
     }
-    private boolean requestAudioFocus() {
-        if (audioManager == null) return true;
-        int result;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (focusRequest == null) focusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                .setOnAudioFocusChangeListener(focusListener).setWillPauseWhenDucked(false).build();
-            result = audioManager.requestAudioFocus(focusRequest);
-        } else {
-            result = audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
-        }
-        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+
+    private String value(String input, String fallback) {
+        return input == null || input.trim().isEmpty() ? fallback : input.trim();
     }
-    private void abandonAudioFocus() {
-        if (audioManager == null) return;
-        try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && focusRequest != null) audioManager.abandonAudioFocusRequest(focusRequest); else audioManager.abandonAudioFocus(focusListener); } catch (Exception ignored) {}
+
+    private void updateSnapshot() {
+        if (player == null) return;
+        isPlaying = player.isPlaying();
+        isActive = player.getMediaItemCount() > 0 && player.getPlaybackState() != Player.STATE_IDLE;
+        positionMs = Math.max(0L, player.getCurrentPosition());
+        long duration = player.getDuration();
+        durationMs = duration == C.TIME_UNSET ? 0L : Math.max(0L, duration);
     }
-    private String value(String s, String fallback) { return s == null || s.trim().isEmpty() ? fallback : s; }
-    private void pausePlayback() { if (player != null && player.isPlaying()) { player.pause(); isPlaying = false; try { positionMs = player.getCurrentPosition(); } catch (Exception ignored) {} updateSessionState(); showNotification(); } }
-    private void resumePlayback() { if (player != null) { try { if (!player.isPlaying()) { player.start(); isPlaying = true; updateSessionState(); showNotification(); handler.removeCallbacks(progress); handler.post(progress); } } catch (Exception ignored) {} } }
-    private void stopPlayerOnly() { handler.removeCallbacks(progress); if (player != null) { try { player.setOnPreparedListener(null); player.stop(); } catch (Exception ignored) {} try { player.release(); } catch (Exception ignored) {} player = null; } }
-    private void stopPlayback(boolean stopService) { stopPlayerOnly(); abandonAudioFocus(); resumeAfterFocus = false; isPlaying = false; isActive = false; positionMs = 0; durationMs = 0; if (session != null) { updateSessionState(); session.setActive(false); } NotificationManager nm = getSystemService(NotificationManager.class); if (nm != null) nm.cancel(NOTIFICATION_ID); stopForeground(true); if (stopService) stopSelf(); }
-    private void updateMetadata() { if (session == null) return; session.setMetadata(new MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, currentTitle).putString(MediaMetadata.METADATA_KEY_ARTIST, currentArtist).putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs).build()); session.setActive(true); }
-    private void updateSessionState() { if (session == null) return; long actions = PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_STOP | PlaybackState.ACTION_SEEK_TO; PlaybackState state = new PlaybackState.Builder().setActions(actions).setState(isPlaying ? PlaybackState.STATE_PLAYING : (isActive ? PlaybackState.STATE_PAUSED : PlaybackState.STATE_STOPPED), positionMs, 1.0f, SystemClock.elapsedRealtime()).build(); session.setPlaybackState(state); }
-    private Notification buildNotification() {
-        Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());
-        PendingIntent content = open == null ? null : PendingIntent.getActivity(this, 7402, open, PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
-        Intent toggle = new Intent(this, BackgroundAudioService.class).setAction(isPlaying ? ACTION_PAUSE : ACTION_RESUME);
-        PendingIntent togglePending = PendingIntent.getService(this, 7403, toggle, PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
-        Intent stop = new Intent(this, BackgroundAudioService.class).setAction(ACTION_STOP);
-        PendingIntent stopPending = PendingIntent.getService(this, 7404, stop, PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
-        // Use the platform MediaStyle tied to this MediaSession. Plain action buttons alone
-        // render as an ordinary notification and do not create the system media-player card.
-        Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_music)
-            .setContentTitle(currentTitle)
-            .setContentText(currentArtist + " · Rich Music")
-            .setCategory(Notification.CATEGORY_TRANSPORT)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setOngoing(isActive)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(content)
-            .setShowWhen(false)
-            .addAction(new Notification.Action.Builder(
-                isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
-                isPlaying ? "Jeda" : "Lanjutkan", togglePending).build())
-            .addAction(new Notification.Action.Builder(
-                android.R.drawable.ic_menu_close_clear_cancel, "Berhenti", stopPending).build());
-        if (session != null) {
-            builder.setStyle(new Notification.MediaStyle()
-                .setMediaSession(session.getSessionToken())
-                .setShowActionsInCompactView(0, 1));
-        }
-        if (Build.VERSION.SDK_INT >= 31) {
-            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
-        }
-        return builder.build();
+
+    @Override public void onDestroy() {
+        isPlaying = false; isActive = false;
+        if (mediaSession != null) { mediaSession.release(); mediaSession = null; }
+        if (player != null) { player.release(); player = null; }
+        super.onDestroy();
     }
-    private void showNotification() { NotificationManager nm = getSystemService(NotificationManager.class); if (nm != null && isActive) nm.notify(NOTIFICATION_ID, buildNotification()); }
-    @Override public void onTaskRemoved(Intent rootIntent) { /* Native local playback intentionally continues after task swipe. */ super.onTaskRemoved(rootIntent); }
-    @Override public void onDestroy() { stopPlayerOnly(); abandonAudioFocus(); if (session != null) { session.setActive(false); session.release(); session = null; } isPlaying = false; isActive = false; super.onDestroy(); }
-    @Override public IBinder onBind(Intent intent) { return null; }
 }
 JAVA
 
@@ -285,13 +265,37 @@ for permission in [
 service='''        <service
             android:name=".BackgroundAudioService"
             android:enabled="true"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="mediaPlayback"
-            android:stopWithTask="false" />
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
 '''
 if '.BackgroundAudioService' not in s:
     s=s.replace('</application>', service+'    </application>')
 manifest.write_text(s)
+# Media3 owns the player/session and generates the Android media notification from actual playback state.
+gradle=Path('android/app/build.gradle')
+if gradle.exists():
+    gs=gradle.read_text()
+    deps = [
+        "implementation 'androidx.media3:media3-exoplayer:1.8.0'",
+        "implementation 'androidx.media3:media3-session:1.8.0'",
+    ]
+    missing=[d for d in deps if d not in gs]
+    if missing:
+        import re
+        match=re.search(r'dependencies\s*\{', gs)
+        if not match:
+            raise SystemExit('Tidak menemukan blok dependencies di android/app/build.gradle')
+        pos=match.end()
+        gs=gs[:pos]+"\n    "+"\n    ".join(missing)+gs[pos:]
+        gradle.write_text(gs)
+else:
+    raise SystemExit('android/app/build.gradle belum ada; jalankan setelah npx cap add android')
+
 main=Path('android/app/src/main/java/com/richmusic/app/MainActivity.java')
 s=main.read_text()
 if 'BackgroundAudioPlugin.class' not in s:

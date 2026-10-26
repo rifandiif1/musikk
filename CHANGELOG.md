@@ -22,3 +22,10 @@
 - Menampilkan kontrol Jeda/Lanjutkan dan Berhenti dalam tampilan ringkas notifikasi media.
 - Menaikkan service-worker cache ke `rich-music-shell-v28`.
 - Menambah smoke-test untuk memastikan MediaStyle dan token MediaSession tidak terhapus.
+
+
+## v9.2 — Native background playback repair
+
+- Switched native local playback to Media3 ExoPlayer + MediaSessionService; media notification is generated from the active session.
+- Added direct HTTP(S) media URL bridge API; YouTube iframe background limitation is documented.
+- Bumped service-worker cache to v29. Gradle/device testing not yet verified.

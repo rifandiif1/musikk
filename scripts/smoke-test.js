@@ -34,7 +34,7 @@ assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause lo
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
 assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
-assert.match(sw, /rich-music-shell-v28/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v29/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -46,14 +46,13 @@ assert.match(workflow, /assembleDebug/, 'Android workflow should build a debug A
 assert.match(workflow, /upload-artifact@v4/, 'Android workflow should publish the APK artifact');
 assert.match(workflow, /install-android-background\.sh/, 'Android workflow should install the native background service');
 const nativeScript = read('scripts/install-android-background.sh');
-assert.match(nativeScript, /new MediaPlayer\(\)/, 'Android native service should own local audio playback');
-assert.match(nativeScript, /new MediaSession\(this, \"RichMusicSession\"\)/, 'native player should expose an Android MediaSession');
-assert.match(nativeScript, /new Notification\.MediaStyle\(\)/, 'media notification must use Android MediaStyle');
-assert.match(nativeScript, /setMediaSession\(session\.getSessionToken\(\)\)/, 'media notification must bind to MediaSession');
-assert.match(nativeScript, /setShowActionsInCompactView\(0, 1\)/, 'media notification must show compact playback controls');
-assert.match(nativeScript, /requestAudioFocus\(\)/, 'native playback should request audio focus');
+assert.match(nativeScript, /extends MediaSessionService/, 'Android native playback must run in a MediaSessionService');
+assert.match(nativeScript, /new ExoPlayer\.Builder\(this\)\.build\(\)/, 'Media3 ExoPlayer must own native audio playback');
+assert.match(nativeScript, /new MediaSession\.Builder\(this, player\)\.build\(\)/, 'Media3 session must be bound to the actual player');
+assert.match(nativeScript, /onGetSession\(/, 'system media clients must be able to discover the session');
+assert.match(nativeScript, /media3-exoplayer:1\.8\.0/, 'generated Android project must include Media3 ExoPlayer');
+assert.match(nativeScript, /media3-session:1\.8\.0/, 'generated Android project must include Media3 session');
 assert.match(nativeScript, /ACTION_SEEK/, 'native playback should support seeking');
-assert.match(nativeScript, /AudioFocusRequest/, 'Android 8+ playback should use AudioFocusRequest');
 assert.match(nativeScript, /import androidx\.activity\.result\.ActivityResult;/, 'Capacitor activity callback should use AndroidX ActivityResult');
 assert.doesNotMatch(nativeScript, /import com\.getcapacitor\.ActivityResult;/, 'invalid Capacitor ActivityResult import must not return');
 assert.match(nativeScript, /FOREGROUND_SERVICE_MEDIA_PLAYBACK/, 'native player should use media-playback foreground service type');
@@ -88,4 +87,4 @@ const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map((m) => m[1]);
 const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
 assert.deepEqual([...new Set(duplicates)], [], `duplicate HTML IDs found: ${[...new Set(duplicates)].join(', ')}`);
 
-console.log('Rich Music smoke tests passed: source copies, offline UI wiring, IndexedDB, EQ, lyrics/download routes, service-worker cache, Capacitor Android workflow, unique IDs, appearance settings, queue-to-playlist, keyboard controls, native seek timeline, and Android audio-focus handling.');
+console.log('Rich Music smoke tests passed: source copies, offline UI wiring, IndexedDB, EQ, lyrics/download routes, service-worker cache, Capacitor Android workflow, unique IDs, appearance settings, queue-to-playlist, keyboard controls, native seek timeline, Media3 service generation, and background playback wiring.');
