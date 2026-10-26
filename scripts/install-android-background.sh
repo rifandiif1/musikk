@@ -204,6 +204,7 @@ public class BackgroundAudioPlugin extends Plugin {
         data.put("position", BackgroundAudioService.positionMs);
         data.put("duration", BackgroundAudioService.durationMs);
         data.put("active", BackgroundAudioService.isActive);
+        data.put("error", BackgroundAudioService.lastError);
         call.resolve(data);
     }
 }
@@ -213,6 +214,7 @@ cat > "$PKGDIR/BackgroundAudioService.java" <<'JAVA'
 package com.richmusic.app;
 
 import android.content.Intent;
+import android.app.PendingIntent;
 import android.net.Uri;
 import androidx.annotation.Nullable;
 import androidx.media3.common.AudioAttributes;
@@ -245,6 +247,7 @@ public final class BackgroundAudioService extends MediaSessionService {
     public static volatile boolean isActive = false;
     public static volatile long positionMs = 0L;
     public static volatile long durationMs = 0L;
+    public static volatile String lastError = "";
 
     private ExoPlayer player;
     private MediaSession mediaSession;
@@ -256,6 +259,9 @@ public final class BackgroundAudioService extends MediaSessionService {
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                 .build(), true);
+        // Hold a partial wake lock only while ExoPlayer is actually playing audio.
+        player.setWakeMode(C.WAKE_MODE_LOCAL);
+        player.setHandleAudioBecomingNoisy(true);
         player.addListener(new Player.Listener() {
             @Override public void onIsPlayingChanged(boolean playing) {
                 isPlaying = playing;
@@ -278,10 +284,19 @@ public final class BackgroundAudioService extends MediaSessionService {
             }
             @Override public void onPlayerError(PlaybackException error) {
                 isPlaying = false;
+                lastError = error == null ? "Pemutar native gagal memuat audio." :
+                    "Pemutar native gagal: " + value(error.getMessage(), "format atau URL audio tidak didukung");
+                android.util.Log.e("RichMusicPlayback", lastError, error);
                 updateSnapshot();
             }
         });
-        mediaSession = new MediaSession.Builder(this, player).build();
+        Intent launchIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        PendingIntent sessionActivity = launchIntent == null ? null : PendingIntent.getActivity(
+                this, 7406, launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0));
+        MediaSession.Builder sessionBuilder = new MediaSession.Builder(this, player);
+        if (sessionActivity != null) sessionBuilder.setSessionActivity(sessionActivity);
+        mediaSession = sessionBuilder.build();
     }
 
     @Nullable @Override public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
@@ -316,6 +331,7 @@ public final class BackgroundAudioService extends MediaSessionService {
     }
 
     private void startItem(Uri uri, String title, String artist) {
+        lastError = "";
         MediaMetadata metadata = new MediaMetadata.Builder().setTitle(title).setArtist(artist).build();
         MediaItem item = new MediaItem.Builder().setMediaId(uri.toString()).setUri(uri).setMediaMetadata(metadata).build();
         player.setMediaItem(item);
@@ -327,6 +343,7 @@ public final class BackgroundAudioService extends MediaSessionService {
     }
 
     private void startQueue(String itemsJson, int requestedStartIndex) {
+        lastError = "";
         try {
             JSONArray json = new JSONArray(itemsJson == null ? "[]" : itemsJson);
             if (json.length() == 0) { isActive = false; return; }
@@ -352,6 +369,7 @@ public final class BackgroundAudioService extends MediaSessionService {
             updateSnapshot();
         } catch (Exception ex) {
             isPlaying = false; isActive = false;
+            lastError = "Antrean native tidak valid: " + value(ex.getMessage(), "format data salah");
             android.util.Log.e("RichMusicPlayback", "Invalid native playback queue", ex);
         }
     }

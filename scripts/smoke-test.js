@@ -36,7 +36,7 @@ assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause lo
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
 assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
-assert.match(sw, /rich-music-shell-v35/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v37/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -49,8 +49,11 @@ assert.match(workflow, /upload-artifact@v4/, 'Android workflow should publish th
 assert.match(workflow, /install-android-background\.sh/, 'Android workflow should install the native background service');
 const nativeScript = read('scripts/install-android-background.sh');
 assert.match(nativeScript, /extends MediaSessionService/, 'Android native playback must run in a MediaSessionService');
+assert.match(app, /state\?\.active && state\?\.playing/, 'native online playback must confirm actual playback before reporting success');
+assert.match(nativeScript, /player\.setWakeMode\(C\.WAKE_MODE_LOCAL\)/, 'native player should request wake mode for supported background audio');
+assert.match(nativeScript, /data.put\("error", BackgroundAudioService.lastError\)/, 'native playback failures must be surfaced to the frontend');
 assert.match(nativeScript, /new ExoPlayer\.Builder\(this\)\.build\(\)/, 'Media3 ExoPlayer must own native audio playback');
-assert.match(nativeScript, /new MediaSession\.Builder\(this, player\)\.build\(\)/, 'Media3 session must be bound to the actual player');
+assert.match(nativeScript, /new MediaSession\.Builder\(this, player\)/, 'Media3 session must be bound to the actual player');
 assert.match(nativeScript, /onGetSession\(/, 'system media clients must be able to discover the session');
 assert.match(nativeScript, /media3-exoplayer:1\.8\.0/, 'generated Android project must include Media3 ExoPlayer');
 assert.match(nativeScript, /media3-session:1\.8\.0/, 'generated Android project must include Media3 session');
@@ -66,13 +69,13 @@ assert.match(nativeScript, /POST_NOTIFICATIONS/, 'Android 13+ notification permi
 assert.match(app, /window\.RichMusicNativeOnline\.playQueue\(Player\.queue, Player\.index\)/, 'Android main player should route selected songs to native direct-audio playback');
 assert.doesNotMatch(app, /Android online tracks are handed to the installed YouTube Music\/YouTube client first/, 'main player must not return early before rendering Now Playing');
 assert.match(app, /Keep online playback inside RichMusic first[\s\S]*?renderNowPlaying\(\);/, 'Android online playback should render the player before asynchronous source resolution completes');
-assert.match(app, /pemutaran YouTube tertanam dapat berhenti saat diminimalkan/, 'app should disclose that embedded YouTube may stop in background');
-assert.doesNotMatch(app, /bridge\.openYoutubeMusic\(\{ url:/, 'main player must not automatically launch YouTube Music or a browser when direct audio resolution fails');
+assert.match(app, /Dibuka di YouTube Music\/ReVanced\. Minimalkan RichMusic/, 'app should tell the user to use the destination app notification after handoff');
+assert.match(app, /bridge\.openYoutubeMusic\(\{ url:/, 'failed direct-audio resolution should hand off to an external media app for background playback');
 assert.match(nativeScript, /public void openYoutubeMusic\(PluginCall call\)/, 'native bridge should provide YouTube/ReVanced handoff');
 assert.match(nativeScript, /app\.revanced\.android\.apps\.youtube\.music/, 'handoff should try common custom ReVanced YouTube Music package');
 assert.match(nativeScript, /Intent\.createChooser\(viewIntent, \"Putar dengan YouTube Music \/ ReVanced\"\)/, 'custom ReVanced package names should be supported through the Android app chooser');
 assert.match(app, /https:\/\/archive\.org\/advancedsearch\.php/, 'online archive audio search should be wired');
-assert.match(app, /Keep the user inside RichMusic[\s\S]*?must never[\s\S]*?launch a browser/, 'failed native resolution must remain in RichMusic instead of opening an external app');
+assert.match(app, /If no direct stream is available[\s\S]*?system media notification/, 'fallback must hand off playback to a client that owns its media notification');
 assert.match(html, /id=\"online-audio-search-form\"/, 'online audio search UI should exist');
 assert.match(app, /bridge\?\.pickAudio/, 'Android local file picker should be wired');
 assert.match(app, /bridge\.playQueue\(\{ itemsJson: JSON\.stringify\(nativeItems\) \}\)/, 'native local audio should pass selected content URIs to the service');

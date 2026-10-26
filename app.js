@@ -493,18 +493,35 @@ function startCurrent() {
     Player.nativeBgActive = true;
     try { if (Player.yt && Player.ready) Player.yt.pauseVideo(); } catch {}
     window.RichMusicNativeOnline.playQueue(Player.queue, Player.index).then(() => {
-      if (loadId === Player.loadId) toast('Audio online native aktif · bisa minimize dan kunci layar');
+      if (loadId === Player.loadId) toast('Pemutar native aktif. Kontrol media Android seharusnya tersedia di notifikasi.');
     }).catch(async error => {
       if (loadId !== Player.loadId) return;
       Player.nativeBgActive = false;
       try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
-      // Keep the user inside RichMusic. A failed direct-audio resolution must never
-      // launch a browser or another app without an explicit user action.
+      // If no direct stream is available, hand the track to an installed YouTube/ReVanced
+      // client. That app owns the actual audio session and its system media notification.
+      // This is the only reliable fallback for catalog tracks without a direct audio URL.
+      if (loadId !== Player.loadId) return;
+      const bridge = window.Capacitor?.Plugins?.BackgroundAudio;
+      if (nativeAndroid && bridge?.openYoutubeMusic && s?.videoId) {
+        try {
+          await bridge.openYoutubeMusic({ url: `https://music.youtube.com/watch?v=${encodeURIComponent(s.videoId)}` });
+          if (loadId !== Player.loadId) return;
+          Player.nativeBgActive = false;
+          Player.externalHandoffActive = true;
+          try { if (Player.yt && Player.ready) Player.yt.pauseVideo(); } catch {}
+          toast('Dibuka di YouTube Music/ReVanced. Minimalkan RichMusic; gunakan notifikasi aplikasi pemutar untuk kontrol audio.');
+          renderPlayButtons();
+          return;
+        } catch (handoffError) {
+          console.warn('External background playback handoff failed:', handoffError);
+        }
+      }
       Player.nativeBgActive = false;
       Player.externalHandoffActive = false;
       if (loadId !== Player.loadId) return;
       try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
-      toast(`Sumber audio latar tidak tersedia untuk lagu ini. Tetap memutar di RichMusic; pemutaran YouTube tertanam dapat berhenti saat diminimalkan. (${error?.message || 'Sumber langsung tidak ditemukan'})`);
+      toast(`Sumber audio latar tidak tersedia. Install YouTube Music/ReVanced yang mendukung background playback. (${error?.message || 'Sumber langsung tidak ditemukan'})`);
       let attempts = 0;
       const playEmbedded = () => {
         if (loadId !== Player.loadId) return;
@@ -3983,13 +4000,31 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
       if (nativeStartIndex < 0 || !resolved.length) throw new Error('Lagu ini tidak tersedia sebagai audio streaming langsung.');
       window.__richNativeQueueMap = resolved.map(item => ({ title: item.title, sourceIndex: item.sourceIndex }));
       await bridge.playQueue({ itemsJson: JSON.stringify(resolved), startIndex: nativeStartIndex });
-      await bridge.getState?.(); window.__richNativePlaying = true; Player.nativeBgActive = true; renderPlayButtons();
+      // A resolved bridge call only means Android accepted the start request; it does not
+      // prove that ExoPlayer prepared the stream or that a media notification is active.
+      // Confirm real native playback before switching the UI away from the embedded player.
+      let state = null;
+      for (let attempt = 0; attempt < 24; attempt++) {
+        state = await bridge.getState?.();
+        if (state?.error) throw new Error(state.error);
+        if (state?.active && state?.playing) break;
+        await new Promise(resolve => setTimeout(resolve, 350));
+      }
+      if (!state?.active || !state?.playing) {
+        throw new Error('Android belum mengonfirmasi audio native sedang diputar. Notifikasi media hanya muncul untuk audio yang benar-benar dimainkan oleh pemutar native.');
+      }
+      window.__richNativePlaying = true; Player.nativeBgActive = true; renderPlayButtons();
     },
     async getState() { const state = await nativeBridge()?.getState?.(); if (state) window.__richNativePlaying = !!state.playing; return state; },
     async pause() { await nativeBridge()?.pauseLocal?.(); window.__richNativePlaying = false; renderPlayButtons(); },
     async resume() { await nativeBridge()?.resumeLocal?.(); window.__richNativePlaying = true; renderPlayButtons(); },
     async seek(positionMs) { await nativeBridge()?.seekLocal?.({ position: Math.max(0, Number(positionMs) || 0) }); },
     async stop() { await nativeBridge()?.stopLocal?.(); window.__richNativePlaying = false; Player.nativeBgActive = false; renderPlayButtons(); },
+    async openYoutubeMusic(url) {
+      const bridge = nativeBridge();
+      if (!bridge?.openYoutubeMusic) throw new Error('Android external player handoff is unavailable. Rebuild the APK with the latest native plugin.');
+      return bridge.openYoutubeMusic({ url });
+    },
   };
   setInterval(async () => { if (!Player.nativeBgActive) return; try { const state = await window.RichMusicNativeOnline.getState(); if (state?.active) window.__richNativePlaying = !!state.playing; renderPlayButtons(); } catch {} }, 800);
 })();
