@@ -34,7 +34,7 @@ assert.match(app, /RichLocalAudioPause/, 'sleep timer should be able to pause lo
 assert.match(server, /\/api\/lyrics\/search/, 'multi-candidate lyrics endpoint should exist');
 assert.match(server, /\/api\/download-start/, 'download start endpoint should exist');
 assert.match(server, /Access-Control-Allow-Origin/, 'bundled Android frontend needs API CORS headers');
-assert.match(sw, /rich-music-shell-v31/, 'service worker cache version should be bumped after asset changes');
+assert.match(sw, /rich-music-shell-v34/, 'service worker cache version should be bumped after asset changes');
 
 const capacitor = JSON.parse(read('capacitor.config.json'));
 const workflow = read('.github/workflows/android-apk.yml');
@@ -54,16 +54,22 @@ assert.match(nativeScript, /media3-exoplayer:1\.8\.0/, 'generated Android projec
 assert.match(nativeScript, /media3-session:1\.8\.0/, 'generated Android project must include Media3 session');
 assert.match(nativeScript, /ACTION_SEEK/, 'native playback should support seeking');
 assert.match(nativeScript, /ACTION_PLAY_QUEUE/, 'native playback should accept a playlist queue');
-assert.match(nativeScript, /player\.setMediaItems\(items, 0, 0L\)/, 'native playlist should expose next/previous media-session controls');
+assert.match(nativeScript, /player\.setMediaItems\(items, startIndex, 0L\)/, 'native playlist should start at the selected item and expose next/previous media-session controls');
 assert.match(nativeScript, /EXTRA_ALLOW_MULTIPLE/, 'native picker should allow multiple local audio files');
 assert.match(app, /bridge\.playQueue\(\{ itemsJson: JSON\.stringify\(nativeItems\) \}\)/, 'native picker should pass selected tracks as a queue');
 assert.match(nativeScript, /import androidx\.activity\.result\.ActivityResult;/, 'Capacitor activity callback should use AndroidX ActivityResult');
 assert.doesNotMatch(nativeScript, /import com\.getcapacitor\.ActivityResult;/, 'invalid Capacitor ActivityResult import must not return');
 assert.match(nativeScript, /FOREGROUND_SERVICE_MEDIA_PLAYBACK/, 'native player should use media-playback foreground service type');
 assert.match(nativeScript, /POST_NOTIFICATIONS/, 'Android 13+ notification permission should be declared and requested');
-assert.match(app, /YouTube IFrame cannot be bridged into ExoPlayer/, 'YouTube IFrame background limitation should be explicit');
+assert.match(app, /window\.RichMusicNativeOnline\.playQueue\(Player\.queue, Player\.index\)/, 'Android main player should route selected songs to native direct-audio playback');
+assert.match(app, /Player\.externalHandoffActive = true/, 'Android online playback should prefer the installed YouTube/ReVanced client');
+assert.match(app, /lagu ini mungkin berhenti saat diminimalkan/, 'app should disclose when it falls back to YouTube without background support');
+assert.match(app, /bridge\.openYoutubeMusic\(\{ url:/, 'main player should hand off YouTube songs to the installed YouTube/ReVanced client');
+assert.match(nativeScript, /public void openYoutubeMusic\(PluginCall call\)/, 'native bridge should provide YouTube/ReVanced handoff');
+assert.match(nativeScript, /app\.revanced\.android\.apps\.youtube\.music/, 'handoff should try common custom ReVanced YouTube Music package');
+assert.match(nativeScript, /Aplikasi YouTube Music\/YouTube yang didukung tidak ditemukan/, 'handoff should not silently open a browser instead of a supported app');
 assert.match(app, /https:\/\/archive\.org\/advancedsearch\.php/, 'online archive audio search should be wired');
-assert.match(app, /bridge\.playQueue\(\{ itemsJson: JSON\.stringify\(resolved\) \}\)/, 'online archive tracks should use the native background queue');
+assert.match(app, /if \(Player\.externalHandoffActive\) \{ toast\('Audio sedang dikelola aplikasi YouTube Music\/ReVanced/, 'RichMusic should explain that external playback controls belong to the destination app');
 assert.match(html, /id=\"online-audio-search-form\"/, 'online audio search UI should exist');
 assert.match(app, /bridge\?\.pickAudio/, 'Android local file picker should be wired');
 assert.match(app, /bridge\.playQueue\(\{ itemsJson: JSON\.stringify\(nativeItems\) \}\)/, 'native local audio should pass selected content URIs to the service');

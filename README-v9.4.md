@@ -13,3 +13,10 @@
 
 ## Validation
 `npm test` checks JavaScript syntax and source-level wiring. Android Gradle build and physical-device playback must still be run in GitHub Actions/device; do not treat source tests as proof of runtime background playback.
+
+
+## v9.5 — Android main-player background route
+
+On Android, the main queue resolves a selected song by title/artist against Internet Archive audio records and plays a direct audio file through the native Media3 queue. This is a best-effort catalog match, not YouTube audio extraction: popular/commercial songs may not be available in the archive. Non-Android web/PWA keeps the existing YouTube IFrame player. If a direct audio source is unavailable, the Android main player reports that instead of falsely claiming background playback.
+
+Build and physical-device testing are required; source tests alone do not prove background playback.

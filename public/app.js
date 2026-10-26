@@ -51,7 +51,7 @@ function currentTheme() { return 'dark'; }
 // take over that stream; the native service is for Android-picked local files and authorized
 // direct audio URLs. Do not report YouTube as background-capable unless a supported native
 // streaming source is integrated.
-function syncAndroidBackgroundPlayback(_playing) { /* YouTube IFrame cannot be bridged into ExoPlayer. */ }
+function syncAndroidBackgroundPlayback(_playing) { /* Android main playback uses RichMusicNativeOnline direct-audio routing. */ }
 
 // Mark the native wrapper so Android safe-area rules can be applied without changing the PWA.
 try {
@@ -219,6 +219,8 @@ const Player = {
   cued: false,
   pending: null, // song shown in Now Playing while previous track keeps playing
   loadId: 0,
+  nativeBgActive: false,
+  externalHandoffActive: false,
   get current() { return this.queue[this.index] || null; },
 };
 
@@ -481,17 +483,70 @@ function startCurrent() {
   const s = Player.current;
   if (!s) return;
   const loadId = ++Player.loadId;
-  const tryPlay = () => {
-    if (loadId !== Player.loadId) return;
-    if (!Player.ready) return setTimeout(tryPlay, 300);
-    Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() });
-    Player.yt.setPlaybackRate(Player.speed);
-    Player.yt.playVideo();
-    applyPlaybackQuality();
-    setTimeout(applyPlaybackQuality, 400);
-    setTimeout(applyPlaybackQuality, 1600);
-  };
-  tryPlay();
+  const nativeAndroid = (() => { try { return !!window.Capacitor?.isNativePlatform?.() && window.Capacitor?.getPlatform?.() === 'android'; } catch { return false; } })();
+  const externalBridge = window.Capacitor?.Plugins?.BackgroundAudio;
+  // Android online tracks are handed to the installed YouTube Music/YouTube client first.
+  // A patched ReVanced client owns its own background audio session; RichMusic cannot read its audio stream.
+  if (nativeAndroid && s.videoId && externalBridge?.openYoutubeMusic) {
+    Player.externalHandoffActive = true;
+    Player.nativeBgActive = false;
+    try { if (Player.yt && Player.ready) Player.yt.pauseVideo(); } catch {}
+    try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
+    externalBridge.openYoutubeMusic({ url: `https://music.youtube.com/watch?v=${encodeURIComponent(s.videoId)}` }).then(() => {
+      if (loadId === Player.loadId) toast('Lagu dibuka di YouTube Music/ReVanced. Kembali ke RichMusic untuk tampilan lirik; kontrol audio memakai notifikasi aplikasi pemutar.');
+    }).catch(() => {
+      if (loadId !== Player.loadId) return;
+      Player.externalHandoffActive = false;
+      if (Player.yt && Player.ready) { try { Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() }); Player.yt.setPlaybackRate(Player.speed); Player.yt.playVideo(); } catch {} }
+      toast('Aplikasi YouTube Music/ReVanced tidak dapat dibuka; memakai pemutar dalam RichMusic. Background tidak dijamin.');
+    });
+    renderPlayButtons();
+    return;
+  }
+  Player.externalHandoffActive = false;
+  if (nativeAndroid && window.RichMusicNativeOnline?.playQueue) {
+    Player.nativeBgActive = true;
+    try { if (Player.yt && Player.ready) Player.yt.pauseVideo(); } catch {}
+    window.RichMusicNativeOnline.playQueue(Player.queue, Player.index).then(() => {
+      if (loadId === Player.loadId) toast('Audio online native aktif · bisa minimize dan kunci layar');
+    }).catch(async error => {
+      if (loadId !== Player.loadId) return;
+      Player.nativeBgActive = false;
+      try { window.RichMusicNativeOnline?.stop()?.catch?.(() => {}); } catch {}
+      // Direct-audio sources may be unavailable for copyrighted/catalog tracks. Hand off to
+      // the installed YouTube/YouTube Music app so a ReVanced build can own background playback.
+      // RichMusic cannot embed ReVanced patches inside its YouTube IFrame/WebView player.
+      const bridge = window.Capacitor?.Plugins?.BackgroundAudio;
+      const videoId = String(s.videoId || '').trim();
+      if (nativeAndroid && videoId && bridge?.openYoutubeMusic) {
+        try {
+          await bridge.openYoutubeMusic({ url: `https://music.youtube.com/watch?v=${encodeURIComponent(videoId)}` });
+          if (loadId === Player.loadId) toast('Lagu dibuka di aplikasi YouTube Music/YouTube. Background mengikuti kemampuan aplikasi tujuan (ReVanced mendukungnya jika terpasang dan terkonfigurasi).');
+          renderPlayButtons();
+          return;
+        } catch (handoffError) {
+          toast('Audio langsung tidak tersedia dan aplikasi YouTube tidak bisa dibuka. Memakai pemutar YouTube di RichMusic; background tidak dijamin.');
+        }
+      } else {
+        toast(`${error?.message || 'Sumber audio background tidak tersedia'} Memutar melalui YouTube; lagu ini mungkin berhenti saat diminimalkan.`);
+      }
+      if (Player.yt && Player.ready) { try { Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() }); Player.yt.setPlaybackRate(Player.speed); Player.yt.playVideo(); } catch {} }
+      renderPlayButtons();
+    });
+  } else {
+    Player.nativeBgActive = false;
+    const tryPlay = () => {
+      if (loadId !== Player.loadId) return;
+      if (!Player.ready) return setTimeout(tryPlay, 300);
+      Player.yt.loadVideoById({ videoId: s.videoId, suggestedQuality: suggestedQuality() });
+      Player.yt.setPlaybackRate(Player.speed);
+      Player.yt.playVideo();
+      applyPlaybackQuality();
+      setTimeout(applyPlaybackQuality, 400);
+      setTimeout(applyPlaybackQuality, 1600);
+    };
+    tryPlay();
+  }
   Library.pushHistory(s);
   Player.lyrics = { synced: null, plain: null, source: null, lines: [], translations: null, translationState: 'idle' };
   Player._lyricsRetried = false;
@@ -563,7 +618,7 @@ function nextTrack(auto) {
     togglePlay();
     return;
   }
-  if (Player.repeat === 2 && auto) { Player.yt.seekTo(0); Player.yt.playVideo(); return; }
+  if (Player.repeat === 2 && auto) { if (Player.nativeBgActive) window.RichMusicNativeOnline?.seek(0).then(() => window.RichMusicNativeOnline?.resume()); else { Player.yt.seekTo(0); Player.yt.playVideo(); } return; }
   if (!Player.queue.length) return;
   let ni;
   if (Player.shuffle) {
@@ -586,12 +641,14 @@ function nextTrack(auto) {
 }
 function prevTrack() {
   if (Player.cued) { togglePlay(); return; }
+  if (Player.nativeBgActive) { window.RichMusicNativeOnline?.getState().then(state => { if ((state.position || 0) > 4000) window.RichMusicNativeOnline.seek(0); else if (Player.index > 0) { Player.index--; startCurrent(); } }); return; }
   if (Player.yt && Player.yt.getCurrentTime && Player.yt.getCurrentTime() > 4) { Player.yt.seekTo(0); return; }
   if (Player.index > 0) { Player.index--; startCurrent(); }
   else if (Player.yt) Player.yt.seekTo(0);
 }
 function togglePlay() {
   if (!Player.current) return;
+  if (Player.externalHandoffActive) { toast('Audio sedang dikelola aplikasi YouTube Music/ReVanced. Gunakan kontrol media pada notifikasi aplikasi tersebut.'); return; }
   if (Player.cued) {
     const s = Player.current;
     const hasRadio = Player.queue.some((q, i) => i > Player.index && !q._user);
@@ -599,6 +656,7 @@ function togglePlay() {
     if (!hasRadio) fetchQueue(s);
     return;
   }
+  if (Player.nativeBgActive) { window.RichMusicNativeOnline?.getState().then(state => state?.playing ? window.RichMusicNativeOnline.pause() : window.RichMusicNativeOnline.resume()).catch(() => {}); return; }
   if (!Player.yt || !Player.ready) return;
   const st = Player.yt.getPlayerState();
   if (st === YT.PlayerState.PLAYING) Player.yt.pauseVideo();
@@ -624,8 +682,24 @@ function toggleNowPlayingPlay() {
 
 /* progress loop */
 let _lastTick = null;
-setInterval(() => {
-  if (!Player.yt || !Player.ready || !Player.current || !Player.yt.getDuration) return;
+setInterval(async () => {
+  if (!Player.current || Player.externalHandoffActive) return;
+  if (Player.nativeBgActive) {
+    try {
+      const state = await window.RichMusicNativeOnline?.getState();
+      if (!state?.active) return;
+      const cur = Math.max(0, Number(state.position || 0) / 1000), dur = Math.max(0, Number(state.duration || 0) / 1000);
+      const pct = dur ? (cur / dur) * 100 : 0;
+      $('#mini-progress-fill').style.width = pct + '%'; const knob = $('.pb-knob'); if (knob) knob.style.left = pct + '%';
+      $('#mini-cur').textContent = fmtTime(cur); $('#mini-dur').textContent = fmtTime(dur);
+      if (!isPreviewing() && !seekDragging) { $('#np-range').value = dur ? Math.round((cur / dur) * 1000) : 0; $('#np-cur').textContent = fmtTime(cur); $('#np-dur').textContent = fmtTime(dur); }
+      if (!isPreviewing()) updateLyricHighlight(cur); syncFloatProgress(pct); if (Player.floatOn) drawPipFrame(pct);
+      const active = (window.__richNativeQueueMap || []).find(x => x.title === state.title);
+      if (active && active.sourceIndex !== Player.index) { Player.index = active.sourceIndex; renderNowPlaying(); renderQueue(); updateLikeButtons(); Player.lyrics = { synced:null, plain:null, source:null, lines:[], translations:null, translationState:'idle' }; loadLyrics(Player.current, { silent:true }); }
+    } catch {}
+    return;
+  }
+  if (!Player.yt || !Player.ready || !Player.yt.getDuration) return;
   const cur = Player.yt.getCurrentTime() || 0;
   // local scrobble: accumulate listen time while playing
   const playing = Player.yt.getPlayerState && Player.yt.getPlayerState() === YT.PlayerState.PLAYING;
@@ -658,7 +732,7 @@ setInterval(() => {
 }, 400);
 
 function renderPlayButtons() {
-  const actuallyPlaying = Player.yt && Player.ready && Player.yt.getPlayerState && Player.yt.getPlayerState() === YT.PlayerState.PLAYING;
+  const actuallyPlaying = Player.nativeBgActive ? !!window.__richNativePlaying : (Player.yt && Player.ready && Player.yt.getPlayerState && Player.yt.getPlayerState() === YT.PlayerState.PLAYING);
   const preview = isPreviewing();
   $('#mini-play').innerHTML = icon(actuallyPlaying ? 'i-pause' : 'i-play');
   $('#np-play').innerHTML = icon(!preview && actuallyPlaying ? 'i-pause' : 'i-play');
@@ -854,7 +928,7 @@ function renderLyrics() {
     }).join('');
     $$('.lyric-line', c).forEach((el) => el.addEventListener('click', () => {
       const t = parseFloat(el.dataset.t);
-      if (Player.yt && Player.ready) { Player.yt.seekTo(t, true); Player.yt.playVideo(); }
+      if (Player.externalHandoffActive) { toast('Seek dikendalikan oleh aplikasi YouTube Music/ReVanced.'); } else if (Player.nativeBgActive) window.RichMusicNativeOnline?.seek(t * 1000); else if (Player.yt && Player.ready) { Player.yt.seekTo(t, true); Player.yt.playVideo(); }
     }));
   } else if (L.plain) {
     c.innerHTML = `<div class="lyric-plain">${esc(L.plain)}</div>${L.translatedPlain ? `<div class="lyric-plain-translation">${esc(L.translatedPlain)}</div>` : ''}`;
@@ -3882,6 +3956,42 @@ window.addEventListener('resize', () => { clearTimeout(handlePlayerOrientation._
   renderLibrary();
   draw();
   window.addEventListener('pagehide', () => { if (raf) cancelAnimationFrame(raf); if (objectUrl) URL.revokeObjectURL(objectUrl); if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {}); });
+
+  // Local/direct audio uses the native Media3 session; online YouTube tracks hand off to the installed YouTube client on Android.
+  const normalizeText = value => String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  async function resolveSongForBackground(song) {
+    const title = String(song?.title || '').trim(), artist = String(song?.artist || song?.subtitle || '').trim();
+    if (!title) throw new Error('Judul lagu kosong; tidak bisa mencari audio background.');
+    const docs = await searchArchiveAudio([title, artist].filter(Boolean).join(' '));
+    if (!docs.length) throw new Error(`Audio streaming langsung tidak ditemukan untuk “${title}”. Coba cari di Musik online · Background.`);
+    const titleKey = normalizeText(title), artistKey = normalizeText(artist);
+    const ranked = docs.map(doc => { const dt = normalizeText(doc.title), da = normalizeText(doc.creator); let score = dt === titleKey ? 100 : (dt.includes(titleKey) || titleKey.includes(dt) ? 45 : 0); score += titleKey.split(' ').filter(w => w.length > 2 && dt.includes(w)).length * 5; if (artistKey && da.includes(artistKey)) score += 50; else if (artistKey && artistKey.split(' ').filter(w => w.length > 2).some(w => da.includes(w))) score += 10; return { doc, score }; }).sort((a,b) => b.score - a.score);
+    for (const candidate of ranked.slice(0, 5)) { try { return { ...(await resolveArchiveItem(candidate.doc.identifier)), sourceTitle: title, sourceArtist: artist, score: candidate.score }; } catch {} }
+    throw new Error(`Tidak ada file audio langsung yang bisa diputar untuk “${title}”.`);
+  }
+  window.RichMusicNativeOnline = {
+    async playQueue(songs, currentIndex) {
+      const bridge = nativeBridge();
+      if (!isNativeAndroid() || !bridge?.playQueue) throw new Error('Pemutar native belum tersedia. Build ulang APK terbaru dari source ini.');
+      const start = Math.max(0, Number(currentIndex) || 0), indices = [];
+      for (let i = Math.max(0, start - 2); i < Math.min((songs || []).length, start + 5); i++) indices.push(i);
+      const resolutionOrder = [start, ...indices.filter(i => i !== start)];
+      const resolved = [];
+      for (const sourceIndex of resolutionOrder) { try { const item = await resolveSongForBackground(songs[sourceIndex]); resolved.push({ uri: item.uri, title: item.title, artist: item.artist, sourceIndex }); } catch (error) { if (sourceIndex === start) throw error; } }
+      resolved.sort((a,b) => a.sourceIndex - b.sourceIndex);
+      const nativeStartIndex = resolved.findIndex(item => item.sourceIndex === start);
+      if (nativeStartIndex < 0 || !resolved.length) throw new Error('Lagu ini tidak tersedia sebagai audio streaming langsung.');
+      window.__richNativeQueueMap = resolved.map(item => ({ title: item.title, sourceIndex: item.sourceIndex }));
+      await bridge.playQueue({ itemsJson: JSON.stringify(resolved), startIndex: nativeStartIndex });
+      await bridge.getState?.(); window.__richNativePlaying = true; Player.nativeBgActive = true; renderPlayButtons();
+    },
+    async getState() { const state = await nativeBridge()?.getState?.(); if (state) window.__richNativePlaying = !!state.playing; return state; },
+    async pause() { await nativeBridge()?.pauseLocal?.(); window.__richNativePlaying = false; renderPlayButtons(); },
+    async resume() { await nativeBridge()?.resumeLocal?.(); window.__richNativePlaying = true; renderPlayButtons(); },
+    async seek(positionMs) { await nativeBridge()?.seekLocal?.({ position: Math.max(0, Number(positionMs) || 0) }); },
+    async stop() { await nativeBridge()?.stopLocal?.(); window.__richNativePlaying = false; Player.nativeBgActive = false; renderPlayButtons(); },
+  };
+  setInterval(async () => { if (!Player.nativeBgActive) return; try { const state = await window.RichMusicNativeOnline.getState(); if (state?.active) window.__richNativePlaying = !!state.playing; renderPlayButtons(); } catch {} }, 800);
 })();
 
 /* ================= lyrics studio: providers, manual import, editor and styling ================= */

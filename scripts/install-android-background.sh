@@ -25,6 +25,40 @@ import androidx.activity.result.ActivityResult;
 
 @CapacitorPlugin(name = "BackgroundAudio")
 public class BackgroundAudioPlugin extends Plugin {
+    /** Opens the selected YouTube track in an installed YouTube/YouTube Music client.
+     * Background playback is provided by the destination app (for example a patched ReVanced build), not by WebView.
+     */
+    @PluginMethod
+    public void openYoutubeMusic(PluginCall call) {
+        String url = call.getData().optString("url", "").trim();
+        if (url.isEmpty() || !(url.startsWith("https://www.youtube.com/") || url.startsWith("https://music.youtube.com/"))) {
+            call.reject("Tautan YouTube tidak valid"); return;
+        }
+        Uri uri = Uri.parse(url);
+        String[] packages = new String[] {
+            "app.revanced.android.apps.youtube.music",
+            "app.rvx.android.apps.youtube.music",
+            "app.revanced.android.youtube.music",
+            "com.google.android.apps.youtube.music",
+            "app.revanced.android.youtube",
+            "app.rvx.android.youtube",
+            "com.google.android.youtube"
+        };
+        for (String packageName : packages) {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+                intent.setPackage(packageName);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(intent);
+                JSObject result = new JSObject();
+                result.put("opened", true);
+                result.put("packageName", packageName);
+                call.resolve(result);
+                return;
+            } catch (Exception ignored) { }
+        }
+        call.reject("Aplikasi YouTube Music/YouTube yang didukung tidak ditemukan. Pasang YouTube Music/ReVanced lalu coba lagi.");
+    }
     @PluginMethod
     public void pickAudio(PluginCall call) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -108,6 +142,7 @@ public class BackgroundAudioPlugin extends Plugin {
             Intent intent = new Intent(getContext(), BackgroundAudioService.class);
             intent.setAction(BackgroundAudioService.ACTION_PLAY_QUEUE);
             intent.putExtra("itemsJson", itemsJson);
+            intent.putExtra("startIndex", Math.max(0, data.optInt("startIndex", 0)));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(intent);
             else getContext().startService(intent);
             call.resolve();
@@ -250,7 +285,7 @@ public final class BackgroundAudioService extends MediaSessionService {
                 if (uri != null && !uri.trim().isEmpty()) startItem(Uri.parse(uri), title, artist);
                 else stopSelf(startId);
             } else if (ACTION_PLAY_QUEUE.equals(action)) {
-                startQueue(intent.getStringExtra("itemsJson"));
+                startQueue(intent.getStringExtra("itemsJson"), intent.getIntExtra("startIndex", 0));
             } else if (ACTION_PAUSE.equals(action)) {
                 if (player != null) player.pause();
             } else if (ACTION_RESUME.equals(action)) {
@@ -278,7 +313,7 @@ public final class BackgroundAudioService extends MediaSessionService {
         updateSnapshot();
     }
 
-    private void startQueue(String itemsJson) {
+    private void startQueue(String itemsJson, int requestedStartIndex) {
         try {
             JSONArray json = new JSONArray(itemsJson == null ? "[]" : itemsJson);
             if (json.length() == 0) { isActive = false; return; }
@@ -294,9 +329,10 @@ public final class BackgroundAudioService extends MediaSessionService {
                 items.add(new MediaItem.Builder().setMediaId(uriText).setUri(uri).setMediaMetadata(metadata).build());
             }
             if (items.isEmpty()) { isActive = false; return; }
-            player.setMediaItems(items, 0, 0L);
-            currentTitle = items.get(0).mediaMetadata.title == null ? "Audio lokal" : items.get(0).mediaMetadata.title.toString();
-            currentArtist = items.get(0).mediaMetadata.artist == null ? "File lokal · Android" : items.get(0).mediaMetadata.artist.toString();
+            int startIndex = Math.max(0, Math.min(requestedStartIndex, items.size() - 1));
+            player.setMediaItems(items, startIndex, 0L);
+            currentTitle = items.get(startIndex).mediaMetadata.title == null ? "Audio lokal" : items.get(startIndex).mediaMetadata.title.toString();
+            currentArtist = items.get(startIndex).mediaMetadata.artist == null ? "File lokal · Android" : items.get(startIndex).mediaMetadata.artist.toString();
             player.prepare();
             player.play();
             isActive = true;
