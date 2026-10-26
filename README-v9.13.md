@@ -10,3 +10,6 @@ No app can force an unsupported streaming provider to continue audio in the back
 
 ## Validation
 Run `npm test`. The source package does not represent a verified APK: build the APK through GitHub Actions and test on the Android device.
+
+## v9.14 build fix
+The Android service generator now imports `android.os.Build`, fixing the `package Build does not exist` Java compiler error reported in GitHub Actions.

@@ -214,6 +214,7 @@ cat > "$PKGDIR/BackgroundAudioService.java" <<'JAVA'
 package com.richmusic.app;
 
 import android.content.Intent;
+import android.os.Build;
 import android.app.PendingIntent;
 import android.net.Uri;
 import androidx.annotation.Nullable;
